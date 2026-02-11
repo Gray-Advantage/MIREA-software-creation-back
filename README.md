@@ -20,5 +20,6 @@ python -m venv venv       # Windows
 
 3. Установка зависимостей
 ```bash
+pip install --upgrade pip
 pip install -r requirements/dev.txt 
 ```
