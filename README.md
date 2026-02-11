@@ -23,3 +23,11 @@ python -m venv venv       # Windows
 pip install --upgrade pip
 pip install -r requirements/dev.txt 
 ```
+
+4. Создание `.env` файла
+```bash
+cp .env.example .env    # Linux/MacOS
+copy .env.example .env  # Windows
+```
+
+После поменять настройки в `.env` под себя
