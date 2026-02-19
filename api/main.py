@@ -1,0 +1,40 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from api.database import engine
+from api.routers import (
+    adjustments,
+    auth,
+    company,
+    employees,
+    me,
+    qr,
+    statistics,
+    time_entries,
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await engine.dispose()
+
+
+app = FastAPI(
+    title="StaffTracker API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(company.router, prefix="/api/company", tags=["Company"])
+app.include_router(employees.router, prefix="/api/employees", tags=["Employees"])
+app.include_router(adjustments.router, prefix="/api/employees", tags=["Adjustments"])
+app.include_router(me.router, prefix="/api/me", tags=["Me"])
+app.include_router(qr.router, prefix="/api/qr", tags=["QR"])
+app.include_router(time_entries.router, prefix="/api/time-entries", tags=["TimeEntries"])
+app.include_router(statistics.router, prefix="/api/statistics", tags=["Statistics"])

@@ -1,33 +1,94 @@
-# <Название>
+# StaffTracker Backend
 
+Система учёта сотрудников, рабочего времени и зарплат.
 
-## Установка и развёртывание
+- **FastAPI** (порт 8001) — REST API для фронтенда
+- **Django** (порт 8000) — админ-панель (`/admin/`)
+- **PostgreSQL 18** — база данных
 
-1. Клонируем репозиторий и переходим в проект
+## Требования
+
+- Docker и Docker Compose
+
+## Запуск с нуля
+
 ```bash
-git clone <URL> <project>
-cd <project>
+git clone <URL> stafftracker-back
+cd stafftracker-back
 ```
 
-2. Создаём виртуальную среду и активируем
 ```bash
-python3 -m venv venv      # Linux/MacOS
-source venv/bin/activate  # Linux/MacOS
-
-python -m venv venv       # Windows
-.\venv\Scripts\activate   # Windows
+cp .env.example .env
 ```
 
-3. Установка зависимостей
 ```bash
-pip install --upgrade pip
-pip install -r requirements/dev.txt 
+make run
 ```
 
-4. Создание `.env` файла
+Готово. Через ~30 секунд будут доступны:
+
+- **API** — http://localhost:8001/docs (Swagger UI)
+- **Django Admin** — http://localhost:8000/admin/
+
+Логин в Django Admin: `admin` / `admin`
+
+## Первая Alembic-миграция
+
+При первом запуске нужно сгенерировать и применить миграцию для бизнес-таблиц:
+
 ```bash
-cp .env.example .env    # Linux/MacOS
-copy .env.example .env  # Windows
+make migration msg="initial"
+make migrate
 ```
 
-После поменять настройки в `.env` под себя
+После этого перезапустить Django, чтобы он увидел таблицы:
+
+```bash
+make restart
+```
+
+## Команды Makefile
+
+| Команда | Описание |
+|---|---|
+| `make run` | Поднять все контейнеры |
+| `make stop` | Остановить все контейнеры |
+| `make restart` | Перезапуск |
+| `make build` | Собрать образы без запуска |
+| `make status` | Статус контейнеров |
+| `make migration msg="описание"` | Сгенерировать Alembic-миграцию |
+| `make migrate` | Применить Alembic-миграции |
+| `make shell-django` | Django shell |
+| `make shell-api` | Bash в API контейнере |
+| `make createsuperuser` | Создать суперпользователя вручную |
+| `make clean` | Удалить контейнеры, volumes и образы |
+
+## Переменные окружения
+
+Все настройки в файле `.env`:
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `DEBUG` | `True` | Режим отладки |
+| `SECRET_KEY` | `dev-secret-key...` | Секрет Django |
+| `POSTGRES_DB` | `stafftracker` | Имя БД |
+| `POSTGRES_USER` | `stafftracker` | Пользователь БД |
+| `POSTGRES_PASSWORD` | `stafftracker` | Пароль БД |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | URL для SQLAlchemy |
+| `DJANGO_SUPERUSER_USERNAME` | `admin` | Логин суперпользователя |
+| `DJANGO_SUPERUSER_PASSWORD` | `admin` | Пароль суперпользователя |
+
+## Архитектура
+
+```
+FastAPI (api, :8001)          Django (admin, :8000)
+   |                               |
+   | SQLAlchemy async              | Django ORM (managed=False)
+   | Alembic миграции              | Только чтение таблиц
+   |                               |
+   +----------- PostgreSQL 18 -----+
+```
+
+- SQLAlchemy владеет схемой БД, Alembic управляет миграциями
+- Django использует `managed=False` модели для отображения данных в админке
+- Django `migrate` создаёт только свои служебные таблицы (`auth_user` и т.д.)
