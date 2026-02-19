@@ -46,7 +46,7 @@ async def register(
         name=body.company.name,
         legal_form=body.company.legal_form,
         legal_address=body.company.legal_address,
-        contact_phone=body.company.contact_phone,
+        contact_name=body.company.contact_name,
         business_area=body.company.business_area,
         email=body.company.email,
     )

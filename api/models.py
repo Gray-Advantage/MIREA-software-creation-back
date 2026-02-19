@@ -32,7 +32,7 @@ class Company(Base):
     logo: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     legal_form: Mapped[str] = mapped_column(String(50))
     legal_address: Mapped[str] = mapped_column(Text)
-    contact_phone: Mapped[str] = mapped_column(String(20))
+    contact_name: Mapped[str] = mapped_column(String(255))
     business_area: Mapped[str] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255), unique=True)
     created_at: Mapped[datetime] = mapped_column(

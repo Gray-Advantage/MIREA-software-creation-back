@@ -25,7 +25,7 @@ class Company(models.Model):
         "Орг.-правовая форма", max_length=50, choices=LEGAL_FORM_CHOICES
     )
     legal_address = models.TextField("Юридический адрес")
-    contact_phone = models.CharField("Контактный телефон", max_length=20)
+    contact_name = models.CharField("Контактный телефон", max_length=20)
     business_area = models.CharField("Сфера деятельности", max_length=255)
     email = models.EmailField("Почта", unique=True)
     created_at = models.DateTimeField("Дата создания", auto_now_add=True)

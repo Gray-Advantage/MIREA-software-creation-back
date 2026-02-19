@@ -10,7 +10,7 @@ class CompanyCreate(BaseModel):
     name: str
     legal_form: str
     legal_address: str
-    contact_phone: str
+    contact_name: str
     business_area: str
     email: EmailStr
 
@@ -21,7 +21,7 @@ class CompanyRead(BaseModel):
     logo: Optional[str] = None
     legal_form: str
     legal_address: str
-    contact_phone: str
+    contact_name: str
     business_area: str
     email: str
     created_at: datetime
@@ -34,6 +34,6 @@ class CompanyUpdate(BaseModel):
     logo: Optional[str] = None
     legal_form: Optional[str] = None
     legal_address: Optional[str] = None
-    contact_phone: Optional[str] = None
+    contact_name: Optional[str] = None
     business_area: Optional[str] = None
     email: Optional[EmailStr] = None
