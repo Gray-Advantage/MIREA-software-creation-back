@@ -72,6 +72,7 @@ async def register(
     response.set_cookie(
         key="session_id",
         value=str(session.id),
+        path="/",
         httponly=True,
         max_age=SESSION_TTL_DAYS * 86400,
         samesite="lax",
@@ -113,6 +114,7 @@ async def login(
     response.set_cookie(
         key="session_id",
         value=str(session.id),
+        path="/",
         httponly=True,
         max_age=SESSION_TTL_DAYS * 86400,
         samesite="lax",
