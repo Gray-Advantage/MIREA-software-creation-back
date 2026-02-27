@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from api.schemas.employee import RateType
+
 
 class EmployeeSalary(BaseModel):
     employee_id: int
@@ -12,7 +14,7 @@ class EmployeeSalary(BaseModel):
     last_name: str
     patronymic: Optional[str] = None
     position: str
-    rate_type: str
+    rate_type: RateType
     rate_amount: Decimal
     currency: str
     quantity: Decimal

@@ -41,7 +41,7 @@ class EmployeeProfileRead(BaseModel):
     patronymic: Optional[str] = None
     phone: Optional[str] = None
     position: str
-    rate_type: str
+    rate_type: RateType
     rate_amount: Decimal
     currency: str
     created_at: datetime
