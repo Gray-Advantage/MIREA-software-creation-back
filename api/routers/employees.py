@@ -67,6 +67,7 @@ async def create_employee(
         first_name=body.first_name,
         last_name=body.last_name,
         patronymic=body.patronymic,
+        phone=body.phone,
         position=body.position,
         rate_type=body.rate_type.value,
         rate_amount=body.rate_amount,

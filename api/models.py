@@ -69,6 +69,7 @@ class EmployeeProfile(Base):
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
     patronymic: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     position: Mapped[str] = mapped_column(String(255))
     rate_type: Mapped[str] = mapped_column(String(20))
     rate_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))

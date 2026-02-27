@@ -29,6 +29,7 @@ class EmployeeProfile(models.Model):
     first_name = models.CharField("Имя", max_length=100)
     last_name = models.CharField("Фамилия", max_length=100)
     patronymic = models.CharField("Отчество", max_length=100, blank=True, null=True)
+    phone = models.CharField("Телефон", max_length=30, blank=True, null=True)
     position = models.CharField("Должность", max_length=255)
     rate_type = models.CharField("Тип ставки", max_length=20, choices=RATE_TYPE_CHOICES)
     rate_amount = models.DecimalField("Сумма ставки", max_digits=10, decimal_places=2)

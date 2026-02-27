@@ -26,6 +26,7 @@ class EmployeeCreate(BaseModel):
     first_name: str
     last_name: str
     patronymic: Optional[str] = None
+    phone: Optional[str] = None
     position: str
     rate_type: RateType
     rate_amount: Decimal
@@ -38,6 +39,7 @@ class EmployeeProfileRead(BaseModel):
     first_name: str
     last_name: str
     patronymic: Optional[str] = None
+    phone: Optional[str] = None
     position: str
     rate_type: str
     rate_amount: Decimal
@@ -61,6 +63,7 @@ class EmployeeUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     patronymic: Optional[str] = None
+    phone: Optional[str] = None
     position: Optional[str] = None
     rate_type: Optional[RateType] = None
     rate_amount: Optional[Decimal] = None
