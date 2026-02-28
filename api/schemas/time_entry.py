@@ -1,7 +1,5 @@
-from __future__ import annotations
-
-from datetime import date, datetime
-from typing import Optional
+import datetime as _dt
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -9,17 +7,17 @@ from pydantic import BaseModel
 class TimeEntryRead(BaseModel):
     id: int
     employee_id: int
-    date: date
+    date: _dt.date
     check_in: datetime
-    check_out: Optional[datetime] = None
+    check_out: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class TimeEntryUpdate(BaseModel):
-    check_in: Optional[datetime] = None
-    check_out: Optional[datetime] = None
+    check_in: datetime | None = None
+    check_out: datetime | None = None
 
 
 class QRScanRequest(BaseModel):

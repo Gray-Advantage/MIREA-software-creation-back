@@ -18,13 +18,24 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 EXCLUDE_TABLES = {
-    "django_migrations", "django_content_type", "django_admin_log",
-    "django_session", "auth_user", "auth_group", "auth_permission",
-    "auth_user_groups", "auth_user_user_permissions", "auth_group_permissions",
+    "django_migrations",
+    "django_content_type",
+    "django_admin_log",
+    "django_session",
+    "auth_user",
+    "auth_group",
+    "auth_permission",
+    "auth_user_groups",
+    "auth_user_user_permissions",
+    "auth_group_permissions",
 }
 
 
-def include_name(name, type_, parent_names):
+def include_name(
+    name: str,
+    type_: str,
+    _parent_names: tuple[str, ...],
+) -> bool:
     if type_ == "table":
         return name not in EXCLUDE_TABLES
     return True
@@ -42,7 +53,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection):
+def do_run_migrations(connection: object) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

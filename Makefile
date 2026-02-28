@@ -1,44 +1,40 @@
-.PHONY: run stop restart build status migrate shell-django shell-api createsuperuser clean
+COMPOSE = docker compose -f docker/docker-compose.yml
 
-# Поднять все контейнеры
+.PHONY: run stop restart build status migrate shell-django shell-api createsuperuser clean lint ruff check-api
+
 run:
-	docker compose up -d --build
+	$(COMPOSE) up -d --build
 
-# Остановить все контейнеры
 stop:
-	docker compose down
+	$(COMPOSE) down
 
-# Перезапустить все контейнеры
 restart: stop run
 
-# Собрать образы без запуска
 build:
-	docker compose build
+	$(COMPOSE) build
 
-# Статус контейнеров
 status:
-	docker compose ps
+	$(COMPOSE) ps
 
-# Alembic: сгенерировать миграцию (msg="описание")
 migration:
-	docker compose exec api sh -c "cd /code/api && alembic revision --autogenerate -m '$(msg)'"
+	$(COMPOSE) exec api sh -c "cd /code/api && alembic revision --autogenerate -m '$(msg)'"
 
-# Alembic: применить миграции
 migrate:
-	docker compose exec api sh -c "cd /code/api && alembic upgrade head"
+	$(COMPOSE) exec api sh -c "cd /code/api && alembic upgrade head"
 
-# Django shell
 shell-django:
-	docker compose exec django python manage.py shell
+	$(COMPOSE) exec django python manage.py shell
 
-# Bash в контейнере API
 shell-api:
-	docker compose exec api sh
+	$(COMPOSE) exec api sh
 
-# Создать суперпользователя Django вручную
 createsuperuser:
-	docker compose exec django python manage.py createsuperuser
+	$(COMPOSE) exec django python manage.py createsuperuser
 
-# Удалить все контейнеры, volumes и образы
 clean:
-	docker compose down -v --rmi local
+	$(COMPOSE) down --rmi local
+
+lint:
+	ruff check . --fix
+	ruff format .
+

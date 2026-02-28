@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from decimal import Decimal
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -10,9 +7,7 @@ from api.schemas.employee import RateType
 
 class EmployeeSalary(BaseModel):
     employee_id: int
-    first_name: str
-    last_name: str
-    patronymic: Optional[str] = None
+    full_name: str
     position: str
     rate_type: RateType
     rate_amount: Decimal

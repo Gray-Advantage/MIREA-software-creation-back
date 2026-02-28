@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -10,13 +12,15 @@ from api.database import get_async_session
 from api.models import ApiSession, User
 
 
-async def get_db(session: AsyncSession = Depends(get_async_session)):
+async def get_db(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> AsyncGenerator[AsyncSession, None]:
     yield session
 
 
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_async_session),
+    db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> User:
     raw = request.cookies.get("session_id")
     if not raw:
@@ -31,15 +35,15 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid session",
-        )
+        ) from None
 
     result = await db.execute(
         select(ApiSession)
         .options(joinedload(ApiSession.user).joinedload(User.company))
         .where(
             ApiSession.id == session_id,
-            ApiSession.expires_at > datetime.now(timezone.utc),
-        )
+            ApiSession.expires_at > datetime.now(UTC),
+        ),
     )
     api_session = result.scalar_one_or_none()
 
@@ -52,7 +56,7 @@ async def get_current_user(
     return api_session.user
 
 
-async def require_admin(user: User = Depends(get_current_user)) -> User:
+async def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -61,7 +65,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_employee(user: User = Depends(get_current_user)) -> User:
+async def require_employee(user: Annotated[User, Depends(get_current_user)]) -> User:
     if user.role != "employee":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

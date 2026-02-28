@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
@@ -18,7 +15,7 @@ class CompanyCreate(BaseModel):
 class CompanyRead(BaseModel):
     id: int
     name: str
-    logo: Optional[str] = None
+    logo: str | None = None
     legal_form: str
     legal_address: str
     contact_name: str
@@ -30,10 +27,10 @@ class CompanyRead(BaseModel):
 
 
 class CompanyUpdate(BaseModel):
-    name: Optional[str] = None
-    logo: Optional[str] = None
-    legal_form: Optional[str] = None
-    legal_address: Optional[str] = None
-    contact_name: Optional[str] = None
-    business_area: Optional[str] = None
-    email: Optional[EmailStr] = None
+    name: str | None = None
+    logo: str | None = None
+    legal_form: str | None = None
+    legal_address: str | None = None
+    contact_name: str | None = None
+    business_area: str | None = None
+    email: EmailStr | None = None

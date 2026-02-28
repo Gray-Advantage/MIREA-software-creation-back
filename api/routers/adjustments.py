@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, select
@@ -7,42 +7,53 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_async_session
 from api.deps import require_admin
 from api.models import Adjustment, EmployeeProfile, User
-from api.schemas.adjustment import AdjustmentCreate, AdjustmentRead, AdjustmentUpdate
+from api.schemas.adjustment import (
+    AdjustmentCreate,
+    AdjustmentRead,
+    AdjustmentUpdate,
+)
 
 router = APIRouter()
 
 
 async def _verify_employee_belongs_to_company(
-    employee_id: int, admin: User, db: AsyncSession
+    employee_id: int,
+    admin: User,
+    db: AsyncSession,
 ) -> EmployeeProfile:
     result = await db.execute(
         select(EmployeeProfile)
         .join(User, EmployeeProfile.user_id == User.id)
-        .where(EmployeeProfile.id == employee_id, User.company_id == admin.company_id)
+        .where(
+            EmployeeProfile.id == employee_id,
+            User.company_id == admin.company_id,
+        ),
     )
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found",
         )
     return profile
 
 
-@router.get(
-    "/{employee_id}/adjustments", response_model=list[AdjustmentRead]
-)
+@router.get("/{employee_id}/adjustments")
 async def list_adjustments(
     employee_id: int,
-    type: Optional[str] = Query(default=None, pattern="^(bonus|fine)$"),
-    month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    adjustment_type: Annotated[
+        str | None,
+        Query(alias="type", pattern="^(bonus|fine)$"),
+    ] = None,
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+) -> list[AdjustmentRead]:
     await _verify_employee_belongs_to_company(employee_id, admin, db)
 
     query = select(Adjustment).where(Adjustment.employee_id == employee_id)
-    if type:
-        query = query.where(Adjustment.type == type)
+    if adjustment_type:
+        query = query.where(Adjustment.type == adjustment_type)
     if month:
         year, m = map(int, month.split("-"))
         query = query.where(
@@ -57,15 +68,14 @@ async def list_adjustments(
 
 @router.post(
     "/{employee_id}/adjustments",
-    response_model=AdjustmentRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_adjustment(
     employee_id: int,
     body: AdjustmentCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> AdjustmentRead:
     await _verify_employee_belongs_to_company(employee_id, admin, db)
 
     adjustment = Adjustment(
@@ -82,57 +92,63 @@ async def create_adjustment(
 
 
 @router.get(
-    "/{employee_id}/adjustments/{adjustment_id}", response_model=AdjustmentRead
+    "/{employee_id}/adjustments/{adjustment_id}",
 )
 async def get_adjustment(
     employee_id: int,
     adjustment_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> AdjustmentRead:
     await _verify_employee_belongs_to_company(employee_id, admin, db)
 
     result = await db.execute(
         select(Adjustment).where(
             Adjustment.id == adjustment_id,
             Adjustment.employee_id == employee_id,
-        )
+        ),
     )
     adjustment = result.scalar_one_or_none()
     if adjustment is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Adjustment not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Adjustment not found",
         )
     return AdjustmentRead.model_validate(adjustment)
 
 
 @router.patch(
-    "/{employee_id}/adjustments/{adjustment_id}", response_model=AdjustmentRead
+    "/{employee_id}/adjustments/{adjustment_id}",
 )
 async def update_adjustment(
     employee_id: int,
     adjustment_id: int,
     body: AdjustmentUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> AdjustmentRead:
     await _verify_employee_belongs_to_company(employee_id, admin, db)
 
     result = await db.execute(
         select(Adjustment).where(
             Adjustment.id == adjustment_id,
             Adjustment.employee_id == employee_id,
-        )
+        ),
     )
     adjustment = result.scalar_one_or_none()
     if adjustment is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Adjustment not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Adjustment not found",
         )
 
     update_data = body.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(adjustment, field, value.value if hasattr(value, "value") else value)
+        setattr(
+            adjustment,
+            field,
+            value.value if hasattr(value, "value") else value,
+        )
 
     await db.commit()
     await db.refresh(adjustment)
@@ -146,21 +162,22 @@ async def update_adjustment(
 async def delete_adjustment(
     employee_id: int,
     adjustment_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
     await _verify_employee_belongs_to_company(employee_id, admin, db)
 
     result = await db.execute(
         select(Adjustment).where(
             Adjustment.id == adjustment_id,
             Adjustment.employee_id == employee_id,
-        )
+        ),
     )
     adjustment = result.scalar_one_or_none()
     if adjustment is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Adjustment not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Adjustment not found",
         )
 
     await db.delete(adjustment)

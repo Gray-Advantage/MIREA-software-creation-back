@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AppUser, Company
+from users.models import AppUser, Company
 
 
 @admin.register(Company)
@@ -14,7 +14,14 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(AppUser)
 class AppUserAdmin(admin.ModelAdmin):
-    list_display = ("id", "email", "role", "company", "is_active", "created_at")
+    list_display = (
+        "id",
+        "email",
+        "role",
+        "company",
+        "is_active",
+        "created_at",
+    )
     list_display_links = ("email",)
     search_fields = ("email",)
     list_filter = ("role", "is_active", "company")

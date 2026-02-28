@@ -10,6 +10,16 @@
 
 - Docker и Docker Compose
 
+## Структура Docker
+
+Всё, что связано с Docker, лежит в папке **`docker/`**:
+
+- `docker/docker-compose.yml` — описание сервисов
+- `docker/api.Dockerfile`, `docker/django.Dockerfile` — образы
+- `docker/pg_data/` — данные PostgreSQL (создаётся при первом запуске, в `.gitignore`)
+
+Команда `make clean` удаляет только контейнеры и образы; каталог `docker/pg_data/` не трогает, данные БД сохраняются.
+
 ## Запуск с нуля
 
 ```bash
@@ -49,34 +59,35 @@ make restart
 
 ## Команды Makefile
 
-| Команда | Описание |
-|---|---|
-| `make run` | Поднять все контейнеры |
-| `make stop` | Остановить все контейнеры |
-| `make restart` | Перезапуск |
-| `make build` | Собрать образы без запуска |
-| `make status` | Статус контейнеров |
-| `make migration msg="описание"` | Сгенерировать Alembic-миграцию |
-| `make migrate` | Применить Alembic-миграции |
-| `make shell-django` | Django shell |
-| `make shell-api` | Bash в API контейнере |
-| `make createsuperuser` | Создать суперпользователя вручную |
-| `make clean` | Удалить контейнеры, volumes и образы |
+| Команда                         | Описание                                                             |
+|---------------------------------|----------------------------------------------------------------------|
+| `make run`                      | Поднять все контейнеры                                               |
+| `make stop`                     | Остановить все контейнеры                                            |
+| `make restart`                  | Перезапуск                                                           |
+| `make build`                    | Собрать образы без запуска                                           |
+| `make status`                   | Статус контейнеров                                                   |
+| `make migration msg="описание"` | Сгенерировать Alembic-миграцию                                       |
+| `make migrate`                  | Применить Alembic-миграции                                           |
+| `make shell-django`             | Django shell                                                         |
+| `make shell-api`                | Bash в API контейнере                                                |
+| `make createsuperuser`          | Создать суперпользователя вручную                                    |
+| `make clean`                    | Удалить контейнеры и образы (данные БД в `docker/pg_data/` остаются) |
 
 ## Переменные окружения
 
 Все настройки в файле `.env`:
 
-| Переменная | По умолчанию | Описание |
-|---|---|---|
-| `DEBUG` | `True` | Режим отладки |
-| `SECRET_KEY` | `dev-secret-key...` | Секрет Django |
-| `POSTGRES_DB` | `stafftracker` | Имя БД |
-| `POSTGRES_USER` | `stafftracker` | Пользователь БД |
-| `POSTGRES_PASSWORD` | `stafftracker` | Пароль БД |
-| `DATABASE_URL` | `postgresql+asyncpg://...` | URL для SQLAlchemy |
-| `DJANGO_SUPERUSER_USERNAME` | `admin` | Логин суперпользователя |
-| `DJANGO_SUPERUSER_PASSWORD` | `admin` | Пароль суперпользователя |
+| Переменная                  | По умолчанию             | Описание                 |
+|-----------------------------|--------------------------|--------------------------|
+| `DEBUG`                     | `True`                   | Режим отладки            |
+| `SECRET_KEY`                | `dev-secret-key...`      | Секрет Django            |
+| `POSTGRES_DB`               | `stafftracker`           | Имя БД                   |
+| `POSTGRES_USER`             | `stafftracker`           | Пользователь БД          |
+| `POSTGRES_PASSWORD`         | `stafftracker`           | Пароль БД                |
+| `POSTGRES_HOST`             | `localhost` / `postgres` | Хост БД                  |
+| `POSTGRES_PORT`             | `5432`                   | Порт БД                  |
+| `DJANGO_SUPERUSER_USERNAME` | `admin`                  | Логин суперпользователя  |
+| `DJANGO_SUPERUSER_PASSWORD` | `admin`                  | Пароль суперпользователя |
 
 ## Архитектура
 

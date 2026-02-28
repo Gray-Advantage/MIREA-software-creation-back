@@ -1,9 +1,9 @@
 -r base.txt
 
-fastapi==0.115.8
-uvicorn[standard]==0.34.0
-sqlalchemy[asyncio]==2.0.38
-asyncpg==0.30.0
-alembic==1.14.1
-python-multipart==0.0.20
-pydantic[email]==2.10.6
+fastapi==0.134.0
+uvicorn[standard]==0.41.0
+sqlalchemy[asyncio]==2.0.47
+asyncpg==0.31.0
+alembic==1.18.4
+python-multipart==0.0.22
+pydantic[email]==2.12.5

@@ -1,6 +1,5 @@
 from django.db import models
 
-
 LEGAL_FORM_CHOICES = [
     ("OOO", "ООО"),
     ("IP", "ИП"),
@@ -20,9 +19,16 @@ ROLE_CHOICES = [
 
 class Company(models.Model):
     name = models.CharField("Название", max_length=255)
-    logo = models.CharField("Лого (путь)", max_length=500, blank=True, null=True)
+    logo = models.CharField(
+        "Лого (путь)",
+        max_length=500,
+        blank=True,
+        default="",
+    )
     legal_form = models.CharField(
-        "Орг.-правовая форма", max_length=50, choices=LEGAL_FORM_CHOICES
+        "Орг.-правовая форма",
+        max_length=50,
+        choices=LEGAL_FORM_CHOICES,
     )
     legal_address = models.TextField("Юридический адрес")
     contact_name = models.CharField("Контактный телефон", max_length=20)
@@ -36,7 +42,7 @@ class Company(models.Model):
         verbose_name = "Компания"
         verbose_name_plural = "Компании"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -45,7 +51,10 @@ class AppUser(models.Model):
     password_hash = models.CharField("Хеш пароля", max_length=255)
     role = models.CharField("Роль", max_length=20, choices=ROLE_CHOICES)
     company = models.ForeignKey(
-        Company, on_delete=models.CASCADE, verbose_name="Компания", db_column="company_id"
+        Company,
+        on_delete=models.CASCADE,
+        verbose_name="Компания",
+        db_column="company_id",
     )
     is_active = models.BooleanField("Активен", default=True)
     created_at = models.DateTimeField("Дата создания", auto_now_add=True)
@@ -56,5 +65,5 @@ class AppUser(models.Model):
         verbose_name = "Пользователь приложения"
         verbose_name_plural = "Пользователи приложения"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.email} ({self.get_role_display()})"

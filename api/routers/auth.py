@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
@@ -7,7 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from api.database import get_async_session
 from api.deps import get_current_user
-from api.models import ApiSession, Company, EmployeeProfile, User
+from api.models import ApiSession, Company, User
 from api.schemas.auth import LoginRequest, MeResponse, RegisterRequest
 from api.schemas.company import CompanyRead
 from api.schemas.employee import EmployeeProfileRead
@@ -22,10 +23,10 @@ SESSION_TTL_DAYS = 30
 async def register(
     body: RegisterRequest,
     response: Response,
-    db: AsyncSession = Depends(get_async_session),
-):
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict:
     existing = await db.execute(
-        select(Company).where(Company.email == body.company.email)
+        select(Company).where(Company.email == body.company.email),
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -34,7 +35,7 @@ async def register(
         )
 
     existing_user = await db.execute(
-        select(User).where(User.email == body.email)
+        select(User).where(User.email == body.email),
     )
     if existing_user.scalar_one_or_none():
         raise HTTPException(
@@ -64,7 +65,7 @@ async def register(
 
     session = ApiSession(
         user_id=user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+        expires_at=datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS),
     )
     db.add(session)
     await db.commit()
@@ -85,11 +86,9 @@ async def register(
 async def login(
     body: LoginRequest,
     response: Response,
-    db: AsyncSession = Depends(get_async_session),
-):
-    result = await db.execute(
-        select(User).where(User.email == body.email)
-    )
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict:
+    result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(body.password, user.password_hash):
@@ -106,7 +105,7 @@ async def login(
 
     session = ApiSession(
         user_id=user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+        expires_at=datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS),
     )
     db.add(session)
     await db.commit()
@@ -126,25 +125,23 @@ async def login(
 @router.post("/logout")
 async def logout(
     response: Response,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
-):
-    await db.execute(
-        select(ApiSession).where(ApiSession.user_id == user.id)
-    )
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict:
+    await db.execute(select(ApiSession).where(ApiSession.user_id == user.id))
     response.delete_cookie("session_id")
     return {"detail": "Logged out"}
 
 
-@router.get("/me", response_model=MeResponse)
+@router.get("/me")
 async def me(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session),
-):
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> MeResponse:
     result = await db.execute(
         select(User)
         .options(joinedload(User.company), joinedload(User.profile))
-        .where(User.id == user.id)
+        .where(User.id == user.id),
     )
     full_user = result.unique().scalar_one()
 

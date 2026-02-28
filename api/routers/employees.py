@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -17,16 +19,31 @@ from api.services.auth import hash_password
 router = APIRouter()
 
 
-@router.get("", response_model=list[EmployeeRead])
+@router.get("")
 async def list_employees(
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
-    result = await db.execute(
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    q: Annotated[
+        str | None,
+        Query(description="Поиск по email, ФИО, телефону, должности"),
+    ] = None,
+) -> list[EmployeeRead]:
+    query = (
         select(User)
         .options(joinedload(User.profile))
         .where(User.company_id == admin.company_id, User.role == "employee")
     )
+    if q and (term := q.strip()):
+        term = f"%{term}%"
+        query = query.join(EmployeeProfile, User.id == EmployeeProfile.user_id).where(
+            or_(
+                User.email.ilike(term),
+                EmployeeProfile.full_name.ilike(term),
+                EmployeeProfile.phone.ilike(term),
+                EmployeeProfile.position.ilike(term),
+            ),
+        )
+    result = await db.execute(query)
     users = result.unique().scalars().all()
     return [
         EmployeeRead(
@@ -40,12 +57,15 @@ async def list_employees(
     ]
 
 
-@router.post("", response_model=EmployeeRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_employee(
     body: EmployeeCreate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmployeeRead:
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -64,9 +84,7 @@ async def create_employee(
 
     profile = EmployeeProfile(
         user_id=user.id,
-        first_name=body.first_name,
-        last_name=body.last_name,
-        patronymic=body.patronymic,
+        full_name=body.full_name,
         phone=body.phone,
         position=body.position,
         rate_type=body.rate_type.value,
@@ -87,7 +105,9 @@ async def create_employee(
 
 
 async def _get_employee_user(
-    employee_id: int, admin: User, db: AsyncSession
+    employee_id: int,
+    admin: User,
+    db: AsyncSession,
 ) -> User:
     result = await db.execute(
         select(User)
@@ -96,22 +116,23 @@ async def _get_employee_user(
             User.id == employee_id,
             User.company_id == admin.company_id,
             User.role == "employee",
-        )
+        ),
     )
     user = result.unique().scalar_one_or_none()
     if user is None or user.profile is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found",
         )
     return user
 
 
-@router.get("/{employee_id}", response_model=EmployeeRead)
+@router.get("/{employee_id}")
 async def get_employee(
     employee_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmployeeRead:
     user = await _get_employee_user(employee_id, admin, db)
     return EmployeeRead(
         id=user.id,
@@ -121,13 +142,13 @@ async def get_employee(
     )
 
 
-@router.patch("/{employee_id}", response_model=EmployeeRead)
+@router.patch("/{employee_id}")
 async def update_employee(
     employee_id: int,
     body: EmployeeUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmployeeRead:
     user = await _get_employee_user(employee_id, admin, db)
     update_data = body.model_dump(exclude_unset=True)
 
@@ -137,7 +158,11 @@ async def update_employee(
     profile = user.profile
     for field, value in update_data.items():
         if hasattr(profile, field):
-            setattr(profile, field, value.value if hasattr(value, "value") else value)
+            setattr(
+                profile,
+                field,
+                value.value if hasattr(value, "value") else value,
+            )
 
     await db.commit()
     await db.refresh(user)
@@ -154,9 +179,9 @@ async def update_employee(
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_employee(
     employee_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
     user = await _get_employee_user(employee_id, admin, db)
     user.is_active = False
     await db.commit()
@@ -166,9 +191,9 @@ async def delete_employee(
 async def change_employee_password(
     employee_id: int,
     body: PasswordChange,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict[str, str]:
     user = await _get_employee_user(employee_id, admin, db)
     user.password_hash = hash_password(body.new_password)
     await db.commit()

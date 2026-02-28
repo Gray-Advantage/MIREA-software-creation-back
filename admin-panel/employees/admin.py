@@ -6,11 +6,16 @@ from .models import Adjustment, EmployeeProfile, QRSession, TimeEntry
 @admin.register(EmployeeProfile)
 class EmployeeProfileAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "last_name", "first_name", "position",
-        "rate_type", "rate_amount", "currency", "user",
+        "id",
+        "full_name",
+        "position",
+        "rate_type",
+        "rate_amount",
+        "currency",
+        "user",
     )
-    list_display_links = ("last_name", "first_name")
-    search_fields = ("first_name", "last_name", "position")
+    list_display_links = ("full_name",)
+    search_fields = ("full_name", "position")
     list_filter = ("rate_type", "currency")
     readonly_fields = ("created_at", "updated_at")
 
@@ -25,7 +30,14 @@ class AdjustmentAdmin(admin.ModelAdmin):
 
 @admin.register(QRSession)
 class QRSessionAdmin(admin.ModelAdmin):
-    list_display = ("id", "token", "company", "is_active", "expires_at", "created_at")
+    list_display = (
+        "id",
+        "token",
+        "company",
+        "is_active",
+        "expires_at",
+        "created_at",
+    )
     list_filter = ("is_active", "company")
     readonly_fields = ("created_at",)
 

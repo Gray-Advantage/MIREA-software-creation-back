@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from typing import Optional
-
 from pydantic import BaseModel, EmailStr
 
 from api.schemas.company import CompanyCreate, CompanyRead
@@ -24,4 +20,4 @@ class MeResponse(BaseModel):
     email: str
     role: str
     company: CompanyRead
-    profile: Optional[EmployeeProfileRead] = None
+    profile: EmployeeProfileRead | None = None

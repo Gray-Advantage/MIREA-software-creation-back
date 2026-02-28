@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, select
@@ -18,43 +18,44 @@ router = APIRouter()
 
 async def _get_profile(user: User, db: AsyncSession) -> EmployeeProfile:
     result = await db.execute(
-        select(EmployeeProfile).where(EmployeeProfile.user_id == user.id)
+        select(EmployeeProfile).where(EmployeeProfile.user_id == user.id),
     )
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found",
         )
     return profile
 
 
-@router.get("/profile", response_model=EmployeeProfileRead)
+@router.get("/profile")
 async def get_my_profile(
-    user: User = Depends(require_employee),
-    db: AsyncSession = Depends(get_async_session),
-):
+    user: Annotated[User, Depends(require_employee)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmployeeProfileRead:
     profile = await _get_profile(user, db)
     return EmployeeProfileRead.model_validate(profile)
 
 
-@router.get("/salary", response_model=EmployeeSalary)
+@router.get("/salary")
 async def get_my_salary(
-    month: str = Query(pattern=r"^\d{4}-\d{2}$"),
-    user: User = Depends(require_employee),
-    db: AsyncSession = Depends(get_async_session),
-):
+    month: Annotated[str, Query(pattern=r"^\d{4}-\d{2}$")],
+    user: Annotated[User, Depends(require_employee)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> EmployeeSalary:
     profile = await _get_profile(user, db)
     year, m = map(int, month.split("-"))
     data = await calculate_salary(db, profile, year, m)
     return EmployeeSalary(**data)
 
 
-@router.get("/adjustments", response_model=list[AdjustmentRead])
+@router.get("/adjustments")
 async def get_my_adjustments(
-    month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    user: User = Depends(require_employee),
-    db: AsyncSession = Depends(get_async_session),
-):
+    user: Annotated[User, Depends(require_employee)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+) -> list[AdjustmentRead]:
     profile = await _get_profile(user, db)
 
     query = select(Adjustment).where(Adjustment.employee_id == profile.id)
@@ -69,12 +70,12 @@ async def get_my_adjustments(
     return [AdjustmentRead.model_validate(a) for a in result.scalars().all()]
 
 
-@router.get("/time-entries", response_model=list[TimeEntryRead])
+@router.get("/time-entries")
 async def get_my_time_entries(
-    month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    user: User = Depends(require_employee),
-    db: AsyncSession = Depends(get_async_session),
-):
+    user: Annotated[User, Depends(require_employee)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+) -> list[TimeEntryRead]:
     profile = await _get_profile(user, db)
 
     query = select(TimeEntry).where(TimeEntry.employee_id == profile.id)

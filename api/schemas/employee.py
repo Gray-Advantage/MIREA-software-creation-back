@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
@@ -23,10 +20,8 @@ class Currency(str, Enum):
 class EmployeeCreate(BaseModel):
     email: EmailStr
     password: str
-    first_name: str
-    last_name: str
-    patronymic: Optional[str] = None
-    phone: Optional[str] = None
+    full_name: str
+    phone: str | None = None
     position: str
     rate_type: RateType
     rate_amount: Decimal
@@ -36,16 +31,14 @@ class EmployeeCreate(BaseModel):
 class EmployeeProfileRead(BaseModel):
     id: int
     user_id: int
-    first_name: str
-    last_name: str
-    patronymic: Optional[str] = None
-    phone: Optional[str] = None
+    full_name: str
+    phone: str | None = None
     position: str
     rate_type: RateType
     rate_amount: Decimal
     currency: str
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -60,15 +53,13 @@ class EmployeeRead(BaseModel):
 
 
 class EmployeeUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    patronymic: Optional[str] = None
-    phone: Optional[str] = None
-    position: Optional[str] = None
-    rate_type: Optional[RateType] = None
-    rate_amount: Optional[Decimal] = None
-    currency: Optional[Currency] = None
-    is_active: Optional[bool] = None
+    full_name: str | None = None
+    phone: str | None = None
+    position: str | None = None
+    rate_type: RateType | None = None
+    rate_amount: Decimal | None = None
+    currency: Currency | None = None
+    is_active: bool | None = None
 
 
 class PasswordChange(BaseModel):

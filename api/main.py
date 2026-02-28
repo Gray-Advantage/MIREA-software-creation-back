@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from api.routers import (
     auth,
     company,
     employees,
+    health,
     me,
     qr,
     statistics,
@@ -17,7 +19,7 @@ from api.routers import (
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     await engine.dispose()
 
@@ -39,11 +41,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(company.router, prefix="/api/company", tags=["Company"])
-app.include_router(employees.router, prefix="/api/employees", tags=["Employees"])
-app.include_router(adjustments.router, prefix="/api/employees", tags=["Adjustments"])
+app.include_router(
+    employees.router,
+    prefix="/api/employees",
+    tags=["Employees"],
+)
+app.include_router(
+    adjustments.router,
+    prefix="/api/employees",
+    tags=["Adjustments"],
+)
 app.include_router(me.router, prefix="/api/me", tags=["Me"])
 app.include_router(qr.router, prefix="/api/qr", tags=["QR"])
-app.include_router(time_entries.router, prefix="/api/time-entries", tags=["TimeEntries"])
-app.include_router(statistics.router, prefix="/api/statistics", tags=["Statistics"])
+app.include_router(
+    time_entries.router,
+    prefix="/api/time-entries",
+    tags=["TimeEntries"],
+)
+app.include_router(
+    statistics.router,
+    prefix="/api/statistics",
+    tags=["Statistics"],
+)

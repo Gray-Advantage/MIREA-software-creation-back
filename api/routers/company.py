@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,17 +11,19 @@ from api.schemas.company import CompanyRead, CompanyUpdate
 router = APIRouter()
 
 
-@router.get("", response_model=CompanyRead)
-async def get_company(user: User = Depends(require_admin)):
+@router.get("")
+async def get_company(
+    user: Annotated[User, Depends(require_admin)],
+) -> CompanyRead:
     return CompanyRead.model_validate(user.company)
 
 
-@router.patch("", response_model=CompanyRead)
+@router.patch("")
 async def update_company(
     body: CompanyUpdate,
-    user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    user: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> CompanyRead:
     company = user.company
     update_data = body.model_dump(exclude_unset=True)
     for field, value in update_data.items():

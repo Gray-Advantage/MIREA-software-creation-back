@@ -177,3 +177,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Docker
+docker/pg_data/

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, select
@@ -12,13 +12,13 @@ from api.schemas.time_entry import TimeEntryRead, TimeEntryUpdate
 router = APIRouter()
 
 
-@router.get("", response_model=list[TimeEntryRead])
+@router.get("")
 async def list_time_entries(
-    employee_id: Optional[int] = Query(default=None),
-    month: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+    employee_id: Annotated[int | None, Query()] = None,
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+) -> list[TimeEntryRead]:
     query = (
         select(TimeEntry)
         .join(EmployeeProfile, TimeEntry.employee_id == EmployeeProfile.id)
@@ -40,43 +40,45 @@ async def list_time_entries(
     return [TimeEntryRead.model_validate(e) for e in result.scalars().all()]
 
 
-@router.get("/{entry_id}", response_model=TimeEntryRead)
+@router.get("/{entry_id}")
 async def get_time_entry(
     entry_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> TimeEntryRead:
     result = await db.execute(
         select(TimeEntry)
         .join(EmployeeProfile, TimeEntry.employee_id == EmployeeProfile.id)
         .join(User, EmployeeProfile.user_id == User.id)
-        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id)
+        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id),
     )
     entry = result.scalar_one_or_none()
     if entry is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Time entry not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Time entry not found",
         )
     return TimeEntryRead.model_validate(entry)
 
 
-@router.patch("/{entry_id}", response_model=TimeEntryRead)
+@router.patch("/{entry_id}")
 async def update_time_entry(
     entry_id: int,
     body: TimeEntryUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> TimeEntryRead:
     result = await db.execute(
         select(TimeEntry)
         .join(EmployeeProfile, TimeEntry.employee_id == EmployeeProfile.id)
         .join(User, EmployeeProfile.user_id == User.id)
-        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id)
+        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id),
     )
     entry = result.scalar_one_or_none()
     if entry is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Time entry not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Time entry not found",
         )
 
     update_data = body.model_dump(exclude_unset=True)
@@ -91,19 +93,20 @@ async def update_time_entry(
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_time_entry(
     entry_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_async_session),
-):
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
     result = await db.execute(
         select(TimeEntry)
         .join(EmployeeProfile, TimeEntry.employee_id == EmployeeProfile.id)
         .join(User, EmployeeProfile.user_id == User.id)
-        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id)
+        .where(TimeEntry.id == entry_id, User.company_id == admin.company_id),
     )
     entry = result.scalar_one_or_none()
     if entry is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Time entry not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Time entry not found",
         )
 
     await db.delete(entry)

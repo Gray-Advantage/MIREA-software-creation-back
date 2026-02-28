@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-from datetime import date, datetime
+import datetime as _dt
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -17,7 +15,7 @@ class AdjustmentCreate(BaseModel):
     type: AdjustmentType
     amount: Decimal
     comment: str
-    date: date
+    date: _dt.date
 
 
 class AdjustmentRead(BaseModel):
@@ -26,14 +24,14 @@ class AdjustmentRead(BaseModel):
     type: str
     amount: Decimal
     comment: str
-    date: date
+    date: _dt.date
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class AdjustmentUpdate(BaseModel):
-    type: Optional[AdjustmentType] = None
-    amount: Optional[Decimal] = None
-    comment: Optional[str] = None
-    date: Optional[date] = None
+    type: AdjustmentType | None = None
+    amount: Decimal | None = None
+    comment: str | None = None
+    date: _dt.date | None = None

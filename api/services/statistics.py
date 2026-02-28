@@ -1,7 +1,6 @@
-from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import and_, extract, func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import Adjustment, EmployeeProfile, TimeEntry
@@ -19,7 +18,7 @@ async def calculate_work_quantity(
             extract("year", TimeEntry.date) == year,
             extract("month", TimeEntry.date) == month,
             TimeEntry.check_out.is_not(None),
-        )
+        ),
     )
     entries = result.scalars().all()
 
@@ -27,7 +26,7 @@ async def calculate_work_quantity(
         total_hours = Decimal(0)
         for entry in entries:
             delta = entry.check_out - entry.check_in
-            total_hours += Decimal(str(delta.total_seconds())) / Decimal("3600")
+            total_hours += Decimal(str(delta.total_seconds())) / Decimal(3600)
         return total_hours.quantize(Decimal("0.01"))
 
     if employee.rate_type == "shift":
@@ -53,7 +52,7 @@ async def calculate_adjustments_sum(
             Adjustment.type == adj_type,
             extract("year", Adjustment.date) == year,
             extract("month", Adjustment.date) == month,
-        )
+        ),
     )
     return result.scalar_one()
 
@@ -65,16 +64,26 @@ async def calculate_salary(
     month: int,
 ) -> dict:
     quantity = await calculate_work_quantity(db, employee, year, month)
-    bonuses = await calculate_adjustments_sum(db, employee.id, year, month, "bonus")
-    fines = await calculate_adjustments_sum(db, employee.id, year, month, "fine")
+    bonuses = await calculate_adjustments_sum(
+        db,
+        employee.id,
+        year,
+        month,
+        "bonus",
+    )
+    fines = await calculate_adjustments_sum(
+        db,
+        employee.id,
+        year,
+        month,
+        "fine",
+    )
     base_salary = employee.rate_amount * quantity
     total = base_salary + bonuses - fines
 
     return {
         "employee_id": employee.id,
-        "first_name": employee.first_name,
-        "last_name": employee.last_name,
-        "patronymic": employee.patronymic,
+        "full_name": employee.full_name,
         "position": employee.position,
         "rate_type": employee.rate_type,
         "rate_amount": employee.rate_amount,
