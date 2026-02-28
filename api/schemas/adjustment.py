@@ -1,12 +1,12 @@
 import datetime as _dt
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
 
-class AdjustmentType(str, Enum):
+class AdjustmentType(StrEnum):
     bonus = "bonus"
     fine = "fine"
 

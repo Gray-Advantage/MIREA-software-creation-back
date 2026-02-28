@@ -1,17 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, EmailStr
 
 
-class RateType(str, Enum):
+class RateType(StrEnum):
     hourly = "hourly"
     shift = "shift"
     daily = "daily"
 
 
-class Currency(str, Enum):
+class Currency(StrEnum):
     RUB = "RUB"
     EUR = "EUR"
     USD = "USD"
