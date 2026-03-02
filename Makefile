@@ -1,6 +1,7 @@
 COMPOSE = docker compose -f docker/docker-compose.yml
+PYTHON  = python3
 
-.PHONY: run stop restart build status migrate shell-django shell-api createsuperuser clean lint ruff check-api
+.PHONY: run stop restart build status migrate shell-django shell-api createsuperuser clean lint ruff check-api test test-cov
 
 run:
 	$(COMPOSE) up -d --build
@@ -37,4 +38,10 @@ clean:
 lint:
 	ruff check . --fix
 	ruff format .
+
+test:
+	$(PYTHON) -m pytest -vvvv --ff $(ARGS)
+
+test-cov:
+	$(PYTHON) -m pytest -vvvv --ff --cov=api --cov-report=term-missing --cov-report=html $(ARGS)
 

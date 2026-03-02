@@ -1,3 +1,13 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+env = [
+    "ENVIRONMENT=pytest",
+]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 88
@@ -9,6 +19,9 @@ ignore = [
     "B903", "RUF029", "ERA001",  "TD002", "TD003", "FIX002", "TD004", "COM812", "DOC",
     "TC001", "TC003",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
 
 [tool.ruff.lint.pylint]
 max-args = 5
