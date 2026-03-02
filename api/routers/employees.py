@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from api.database import get_async_session
 from api.deps import require_admin
@@ -125,10 +126,10 @@ async def create_employee(
 
     if body.schedule:
         schedule_dicts = [e.model_dump() for e in body.schedule]
-        profile.schedule = await _replace_schedule(
-            db,
-            profile.id,
-            schedule_dicts,
+        set_committed_value(
+            profile,
+            "schedule",
+            await _replace_schedule(db, profile.id, schedule_dicts),
         )
 
     await db.commit()
@@ -187,7 +188,7 @@ async def _load_schedule_filtered(
     for s in rows.scalars().all():
         by_profile.setdefault(s.employee_id, []).append(s)
     for p in profiles:
-        p.schedule = by_profile.get(p.id, [])
+        set_committed_value(p, "schedule", by_profile.get(p.id, []))
 
 
 async def _get_employee_user(
@@ -262,10 +263,10 @@ async def update_employee(
             )
 
     if new_schedule is not None:
-        profile.schedule = await _replace_schedule(
-            db,
-            profile.id,
-            new_schedule,
+        set_committed_value(
+            profile,
+            "schedule",
+            await _replace_schedule(db, profile.id, new_schedule),
         )
 
     await db.commit()
