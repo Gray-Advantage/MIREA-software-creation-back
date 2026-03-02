@@ -111,6 +111,28 @@ class QRSession(models.Model):
         return f"QR {self.token} ({self.company})"
 
 
+class Schedule(models.Model):
+    employee = models.ForeignKey(
+        EmployeeProfile,
+        on_delete=models.CASCADE,
+        verbose_name="Сотрудник",
+        db_column="employee_id",
+    )
+    date = models.DateField("Дата")
+    start_time = models.TimeField("Начало")
+    end_time = models.TimeField("Конец")
+
+    class Meta:
+        managed = False
+        db_table = "schedule"
+        verbose_name = "Расписание"
+        verbose_name_plural = "Расписание"
+        unique_together = (("employee", "date"),)
+
+    def __str__(self) -> str:
+        return f"{self.employee} — {self.date} {self.start_time}-{self.end_time}"
+
+
 class TimeEntry(models.Model):
     employee = models.ForeignKey(
         EmployeeProfile,

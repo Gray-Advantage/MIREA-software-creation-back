@@ -1,8 +1,17 @@
 from decimal import Decimal
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, PlainSerializer
 
 from api.schemas.employee import RateType
+
+Money = Annotated[
+    Decimal,
+    PlainSerializer(
+        lambda v: float(round(v, 2)),
+        return_type=float,
+    ),
+]
 
 
 class EmployeeSalary(BaseModel):
@@ -10,13 +19,13 @@ class EmployeeSalary(BaseModel):
     full_name: str
     position: str
     rate_type: RateType
-    rate_amount: Decimal
+    rate_amount: Money
     currency: str
-    quantity: Decimal
-    base_salary: Decimal
-    bonuses: Decimal
-    fines: Decimal
-    total: Decimal
+    quantity: Money
+    base_salary: Money
+    bonuses: Money
+    fines: Money
+    total: Money
 
 
 class SalaryTableResponse(BaseModel):
@@ -27,4 +36,4 @@ class SalaryTableResponse(BaseModel):
 class SummaryResponse(BaseModel):
     month: str
     total_employees: int
-    total_salary_fund: Decimal
+    total_salary_fund: Money

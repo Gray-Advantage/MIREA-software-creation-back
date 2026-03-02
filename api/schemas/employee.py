@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, EmailStr
 
+from api.schemas.schedule import ScheduleEntry, ScheduleRead
+
 
 class RateType(StrEnum):
     hourly = "hourly"
@@ -26,6 +28,7 @@ class EmployeeCreate(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
     currency: Currency
+    schedule: list[ScheduleEntry] = []
 
 
 class EmployeeProfileRead(BaseModel):
@@ -39,6 +42,7 @@ class EmployeeProfileRead(BaseModel):
     currency: str
     created_at: datetime
     updated_at: datetime | None = None
+    schedule: list[ScheduleRead] = []
 
     model_config = {"from_attributes": True}
 
@@ -60,6 +64,7 @@ class EmployeeUpdate(BaseModel):
     rate_amount: Decimal | None = None
     currency: Currency | None = None
     is_active: bool | None = None
+    schedule: list[ScheduleEntry] | None = None
 
 
 class PasswordChange(BaseModel):

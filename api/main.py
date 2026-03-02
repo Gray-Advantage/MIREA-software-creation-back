@@ -13,6 +13,7 @@ from api.routers import (
     health,
     me,
     qr,
+    schedule,
     statistics,
     time_entries,
 )
@@ -60,6 +61,11 @@ app.include_router(
     time_entries.router,
     prefix="/api/time-entries",
     tags=["TimeEntries"],
+)
+app.include_router(
+    schedule.router,
+    prefix="/api/schedule",
+    tags=["Schedule"],
 )
 app.include_router(
     statistics.router,

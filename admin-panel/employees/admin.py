@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Adjustment, EmployeeProfile, QRSession, TimeEntry
+from .models import Adjustment, EmployeeProfile, QRSession, Schedule, TimeEntry
 
 
 @admin.register(EmployeeProfile)
@@ -40,6 +40,13 @@ class QRSessionAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active", "company")
     readonly_fields = ("created_at",)
+
+
+@admin.register(Schedule)
+class ScheduleAdmin(admin.ModelAdmin):
+    list_display = ("id", "employee", "date", "start_time", "end_time")
+    list_filter = ("date",)
+    search_fields = ("employee__full_name",)
 
 
 @admin.register(TimeEntry)

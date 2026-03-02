@@ -78,17 +78,20 @@ async def calculate_salary(
         month,
         "fine",
     )
-    base_salary = employee.rate_amount * quantity
-    total = base_salary + bonuses - fines
+    cents = Decimal("0.01")
+    base_salary = (employee.rate_amount * quantity).quantize(cents)
+    bonuses = Decimal(bonuses).quantize(cents)
+    fines = Decimal(fines).quantize(cents)
+    total = (base_salary + bonuses - fines).quantize(cents)
 
     return {
         "employee_id": employee.id,
         "full_name": employee.full_name,
         "position": employee.position,
         "rate_type": employee.rate_type,
-        "rate_amount": employee.rate_amount,
+        "rate_amount": employee.rate_amount.quantize(cents),
         "currency": employee.currency,
-        "quantity": quantity,
+        "quantity": quantity.quantize(cents),
         "base_salary": base_salary,
         "bonuses": bonuses,
         "fines": fines,

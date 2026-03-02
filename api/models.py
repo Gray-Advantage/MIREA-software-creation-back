@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -9,10 +9,12 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    Time,
     Uuid,
     func,
 )
@@ -105,6 +107,32 @@ class EmployeeProfile(Base):
     )
     time_entries: Mapped[list[TimeEntry]] = relationship(
         back_populates="employee",
+    )
+    schedule: Mapped[list[Schedule]] = relationship(
+        back_populates="employee",
+        cascade="all, delete-orphan",
+    )
+
+
+class Schedule(Base):
+    __tablename__ = "schedule"
+    __table_args__ = (
+        Index("ix_schedule_employee_date", "employee_id", "date", unique=True),
+        Index("ix_schedule_date", "date"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employee_profile.id"))
+    date: Mapped[date] = mapped_column(Date)
+    start_time: Mapped[time] = mapped_column(Time)
+    end_time: Mapped[time] = mapped_column(Time)
+
+    employee: Mapped[EmployeeProfile] = relationship(
+        back_populates="schedule",
     )
 
 

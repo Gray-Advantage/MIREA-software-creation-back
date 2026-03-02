@@ -1,13 +1,15 @@
+import datetime as _dt
 from typing import Annotated
 
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from api.database import get_async_session
 from api.deps import require_admin
-from api.models import EmployeeProfile, User
+from api.models import EmployeeProfile, Schedule, User
 from api.schemas.employee import (
     EmployeeCreate,
     EmployeeRead,
@@ -15,6 +17,19 @@ from api.schemas.employee import (
     PasswordChange,
 )
 from api.services.auth import hash_password
+
+
+def _schedule_date_range(month: str | None) -> tuple[_dt.date, _dt.date]:
+    if month:
+        year, m = map(int, month.split("-"))
+        start = _dt.date(year, m, 1)
+        end = start + relativedelta(months=1) - _dt.timedelta(days=1)
+    else:
+        today = _dt.datetime.now(_dt.UTC).date()
+        start = today.replace(day=1) - relativedelta(months=1)
+        end = today.replace(day=1) + relativedelta(months=2) - _dt.timedelta(days=1)
+    return start, end
+
 
 router = APIRouter()
 
@@ -27,6 +42,13 @@ async def list_employees(
         str | None,
         Query(description="Поиск по email, ФИО, телефону, должности"),
     ] = None,
+    month: Annotated[
+        str | None,
+        Query(
+            pattern=r"^\d{4}-\d{2}$",
+            description="Месяц расписания (YYYY-MM), по умолчанию ±1 от текущего",
+        ),
+    ] = None,
 ) -> list[EmployeeRead]:
     query = (
         select(User)
@@ -35,7 +57,10 @@ async def list_employees(
     )
     if q and (term := q.strip()):
         term = f"%{term}%"
-        query = query.join(EmployeeProfile, User.id == EmployeeProfile.user_id).where(
+        query = query.join(
+            EmployeeProfile,
+            User.id == EmployeeProfile.user_id,
+        ).where(
             or_(
                 User.email.ilike(term),
                 EmployeeProfile.full_name.ilike(term),
@@ -45,6 +70,10 @@ async def list_employees(
         )
     result = await db.execute(query)
     users = result.unique().scalars().all()
+
+    profiles = [u.profile for u in users if u.profile is not None]
+    await _load_schedule_filtered(db, profiles, month)
+
     return [
         EmployeeRead(
             id=u.id,
@@ -92,6 +121,16 @@ async def create_employee(
         currency=body.currency.value,
     )
     db.add(profile)
+    await db.flush()
+
+    if body.schedule:
+        schedule_dicts = [e.model_dump() for e in body.schedule]
+        profile.schedule = await _replace_schedule(
+            db,
+            profile.id,
+            schedule_dicts,
+        )
+
     await db.commit()
     await db.refresh(user)
     await db.refresh(profile)
@@ -104,10 +143,58 @@ async def create_employee(
     )
 
 
+async def _replace_schedule(
+    db: AsyncSession,
+    profile_id: int,
+    entries: list[dict[str, object]],
+) -> list[Schedule]:
+    await db.execute(
+        delete(Schedule).where(Schedule.employee_id == profile_id),
+    )
+    for entry in entries:
+        db.add(
+            Schedule(
+                employee_id=profile_id,
+                date=entry["date"],
+                start_time=entry["start_time"],
+                end_time=entry["end_time"],
+            ),
+        )
+    await db.flush()
+    rows = await db.execute(
+        select(Schedule).where(Schedule.employee_id == profile_id),
+    )
+    return list(rows.scalars().all())
+
+
+async def _load_schedule_filtered(
+    db: AsyncSession,
+    profiles: list[EmployeeProfile],
+    month: str | None,
+) -> None:
+    if not profiles:
+        return
+    date_from, date_to = _schedule_date_range(month)
+    profile_ids = [p.id for p in profiles]
+    rows = await db.execute(
+        select(Schedule).where(
+            Schedule.employee_id.in_(profile_ids),
+            Schedule.date >= date_from,
+            Schedule.date <= date_to,
+        ),
+    )
+    by_profile: dict[int, list[Schedule]] = {}
+    for s in rows.scalars().all():
+        by_profile.setdefault(s.employee_id, []).append(s)
+    for p in profiles:
+        p.schedule = by_profile.get(p.id, [])
+
+
 async def _get_employee_user(
     employee_id: int,
     admin: User,
     db: AsyncSession,
+    month: str | None = None,
 ) -> User:
     result = await db.execute(
         select(User)
@@ -124,6 +211,7 @@ async def _get_employee_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Employee not found",
         )
+    await _load_schedule_filtered(db, [user.profile], month)
     return user
 
 
@@ -132,8 +220,15 @@ async def get_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    month: Annotated[
+        str | None,
+        Query(
+            pattern=r"^\d{4}-\d{2}$",
+            description="Месяц расписания (YYYY-MM), по умолчанию ±1 от текущего",
+        ),
+    ] = None,
 ) -> EmployeeRead:
-    user = await _get_employee_user(employee_id, admin, db)
+    user = await _get_employee_user(employee_id, admin, db, month)
     return EmployeeRead(
         id=user.id,
         email=user.email,
@@ -155,6 +250,8 @@ async def update_employee(
     if "is_active" in update_data:
         user.is_active = update_data.pop("is_active")
 
+    new_schedule = update_data.pop("schedule", None)
+
     profile = user.profile
     for field, value in update_data.items():
         if hasattr(profile, field):
@@ -163,6 +260,13 @@ async def update_employee(
                 field,
                 value.value if hasattr(value, "value") else value,
             )
+
+    if new_schedule is not None:
+        profile.schedule = await _replace_schedule(
+            db,
+            profile.id,
+            new_schedule,
+        )
 
     await db.commit()
     await db.refresh(user)
