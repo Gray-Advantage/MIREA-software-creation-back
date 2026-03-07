@@ -30,6 +30,30 @@ class EmployeeCreate(BaseModel):
     currency: Currency
     schedule: list[ScheduleEntry] = []
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "email": "ivanov@example.com",
+                    "password": "securePass123",
+                    "full_name": "Иванов Иван Иванович",
+                    "phone": "+79991234567",
+                    "position": "Бариста",
+                    "rate_type": "hourly",
+                    "rate_amount": 350,
+                    "currency": "RUB",
+                    "schedule": [
+                        {
+                            "date": "2026-03-10",
+                            "start_time": "09:00:00",
+                            "end_time": "18:00:00",
+                        },
+                    ],
+                },
+            ],
+        },
+    }
+
 
 class EmployeeProfileRead(BaseModel):
     id: int

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from api.database import get_async_session
 from api.deps import get_current_user
@@ -147,6 +148,7 @@ async def me(
 
     profile_data = None
     if full_user.profile:
+        set_committed_value(full_user.profile, "schedule", [])
         profile_data = EmployeeProfileRead.model_validate(full_user.profile)
 
     return MeResponse(

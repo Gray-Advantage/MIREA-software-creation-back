@@ -1,3 +1,4 @@
+from http import HTTPStatus
 from typing import Any, Literal, LiteralString
 
 import pytest
@@ -26,3 +27,11 @@ class TestView:
             self.URL.format(**path),
             **kwargs,
         )
+
+
+class AuthTestView(TestView):
+    """Автоматически проверяет 401 для неавторизованного клиента."""
+
+    async def test_error__when_unauthorized(self, client: AsyncClient) -> None:
+        response = await self.request(client)
+        assert response.status_code == HTTPStatus.UNAUTHORIZED

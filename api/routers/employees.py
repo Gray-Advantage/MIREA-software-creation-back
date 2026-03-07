@@ -135,6 +135,7 @@ async def create_employee(
     await db.commit()
     await db.refresh(user)
     await db.refresh(profile)
+    await _load_schedule_filtered(db, [profile], None)
 
     return EmployeeRead(
         id=user.id,
@@ -272,6 +273,7 @@ async def update_employee(
     await db.commit()
     await db.refresh(user)
     await db.refresh(profile)
+    await _load_schedule_filtered(db, [profile], None)
 
     return EmployeeRead(
         id=user.id,

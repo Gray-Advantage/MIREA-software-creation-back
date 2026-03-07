@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.database import get_async_session
 from api.deps import require_employee
@@ -16,10 +17,16 @@ from api.services.statistics import calculate_salary
 router = APIRouter()
 
 
-async def _get_profile(user: User, db: AsyncSession) -> EmployeeProfile:
-    result = await db.execute(
-        select(EmployeeProfile).where(EmployeeProfile.user_id == user.id),
-    )
+async def _get_profile(
+    user: User,
+    db: AsyncSession,
+    *,
+    load_schedule: bool = False,
+) -> EmployeeProfile:
+    query = select(EmployeeProfile).where(EmployeeProfile.user_id == user.id)
+    if load_schedule:
+        query = query.options(selectinload(EmployeeProfile.schedule))
+    result = await db.execute(query)
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(
@@ -34,7 +41,7 @@ async def get_my_profile(
     user: Annotated[User, Depends(require_employee)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> EmployeeProfileRead:
-    profile = await _get_profile(user, db)
+    profile = await _get_profile(user, db, load_schedule=True)
     return EmployeeProfileRead.model_validate(profile)
 
 
