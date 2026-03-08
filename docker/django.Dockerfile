@@ -1,12 +1,14 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 WORKDIR /code
 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY requirements/base.txt requirements/base.txt
 COPY requirements/django.txt requirements/django.txt
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev postgresql-dev \
-    && pip install --no-cache-dir -r requirements/django.txt \
-    && apk del .build-deps
+RUN pip install --no-cache-dir -r requirements/django.txt
 
 COPY admin-panel/ admin-panel/
 
