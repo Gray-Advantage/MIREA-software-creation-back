@@ -9,6 +9,7 @@ from api.routers import (
     adjustments,
     auth,
     company,
+    easter_eggs,
     employees,
     health,
     me,
@@ -72,3 +73,4 @@ app.include_router(
     prefix="/api/statistics",
     tags=["Statistics"],
 )
+app.include_router(easter_eggs.router)

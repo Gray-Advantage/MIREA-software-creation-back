@@ -9,5 +9,6 @@ RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev \
     && apk del .build-deps
 
 COPY api/ api/
+COPY docker/bonus.jpg docker/fine.jpg docker/
 
 CMD ["sh", "-c", "cd /code/api && alembic upgrade head && exec uvicorn api.main:app --host 0.0.0.0 --port 8001 --app-dir /code"]

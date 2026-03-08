@@ -1,9 +1,12 @@
+import base64
 import datetime as _dt
+import secrets
+import uuid
 from decimal import Decimal
 from typing import Annotated
 
 from dateutil.relativedelta import relativedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -25,6 +28,7 @@ from api.schemas.employee import (
     EmployeeUpdate,
     PasswordChange,
 )
+from api.services import s3
 from api.services.auth import hash_password
 
 
@@ -118,6 +122,47 @@ def _filter_past_schedule(profile: EmployeeProfile) -> None:
     )
 
 
+async def _upload_avatar(
+    profile: EmployeeProfile,
+    avatar_b64: str,
+) -> None:
+    if avatar_b64.startswith("data:"):
+        header, b64_data = avatar_b64.split(",", 1)
+        content_type = header.split(":")[1].split(";")[0]
+    else:
+        b64_data = avatar_b64
+        content_type = "image/jpeg"
+
+    data = base64.b64decode(b64_data)
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
+
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
+
+    await s3.upload(key, data, content_type)
+    profile.avatar_key = key
+
+
+async def _delete_avatar(profile: EmployeeProfile) -> None:
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
+        profile.avatar_key = None
+
+
+async def _handle_avatar_field(
+    profile: EmployeeProfile,
+    update_data: dict[str, object],
+) -> None:
+    if "avatar" not in update_data:
+        return
+    value = update_data.pop("avatar")
+    if value is None:
+        await _delete_avatar(profile)
+    else:
+        await _upload_avatar(profile, value)
+
+
 def _build_employee_response(
     user: User,
     profile: EmployeeProfile,
@@ -127,11 +172,18 @@ def _build_employee_response(
     salary = _compute_monthly_salary(profile.schedule, month)
     final = _compute_final_salary(salary, adjustments or [])
     _filter_past_schedule(profile)
+
+    from api.schemas.employee import EmployeeProfileRead
+
+    profile_read = EmployeeProfileRead.model_validate(profile)
+    if profile.avatar_key:
+        profile_read.avatar_url = f"/api/employees/{user.id}/avatar"
+
     return EmployeeRead(
         id=user.id,
         email=user.email,
         is_active=user.is_active,
-        profile=profile,
+        profile=profile_read,
         monthly_salary=salary,
         final_salary=final,
     )
@@ -215,7 +267,7 @@ async def create_employee(
 
     user = User(
         email=body.email,
-        password_hash=hash_password(body.password),
+        password_hash=hash_password(secrets.token_urlsafe(16)),
         role="employee",
         company_id=admin.company_id,
     )
@@ -233,6 +285,9 @@ async def create_employee(
     )
     db.add(profile)
     await db.flush()
+
+    if body.avatar:
+        await _upload_avatar(profile, body.avatar)
 
     if body.schedule:
         schedule_dicts = [e.model_dump() for e in body.schedule]
@@ -375,6 +430,8 @@ async def update_employee(
     new_schedule = update_data.pop("schedule", None)
 
     profile = user.profile
+    await _handle_avatar_field(profile, update_data)
+
     for field, value in update_data.items():
         if hasattr(profile, field):
             setattr(
@@ -409,6 +466,36 @@ async def update_employee(
     )
 
 
+@router.get("/{employee_id}/avatar")
+async def get_avatar(
+    employee_id: int,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> Response:
+    user = await _get_employee_user(employee_id, admin, db)
+    if not user.profile.avatar_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Avatar not found",
+        )
+    data, content_type = await s3.download(user.profile.avatar_key)
+    return Response(content=data, media_type=content_type)
+
+
+@router.delete(
+    "/{employee_id}/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_avatar(
+    employee_id: int,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
+    user = await _get_employee_user(employee_id, admin, db)
+    await _delete_avatar(user.profile)
+    await db.commit()
+
+
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_employee(
     employee_id: int,
@@ -417,6 +504,9 @@ async def delete_employee(
 ) -> None:
     user = await _get_employee_user(employee_id, admin, db)
     profile = user.profile
+
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
 
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile.id),

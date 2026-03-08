@@ -42,6 +42,7 @@ class TestListEmployees(AuthTestView):
                     "rate_type": "hourly",
                     "rate_amount": "500.00",
                     "currency": "RUB",
+                    "avatar_url": None,
                     "created_at": ANY,
                     "updated_at": None,
                     "schedule": [],

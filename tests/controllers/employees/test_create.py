@@ -35,6 +35,7 @@ class TestCreateEmployee(AuthTestView):
                 "rate_type": "hourly",
                 "rate_amount": "500.00",
                 "currency": "RUB",
+                "avatar_url": None,
                 "created_at": ANY,
                 "updated_at": None,
                 "schedule": [],
@@ -93,6 +94,7 @@ class TestCreateEmployee(AuthTestView):
                 "rate_type": "hourly",
                 "rate_amount": "500.00",
                 "currency": "RUB",
+                "avatar_url": None,
                 "created_at": ANY,
                 "updated_at": None,
                 "schedule": ANY,
@@ -107,7 +109,6 @@ class TestCreateEmployee(AuthTestView):
     ) -> None:
         payload = {
             "email": "minimal@test.com",
-            "password": "pass123",
             "full_name": "Минимальный Сотрудник",
             "position": "Стажёр",
             "rate_type": "shift",
@@ -130,6 +131,7 @@ class TestCreateEmployee(AuthTestView):
                 "rate_type": "shift",
                 "rate_amount": "1000.00",
                 "currency": "RUB",
+                "avatar_url": None,
                 "created_at": ANY,
                 "updated_at": None,
                 "schedule": [],

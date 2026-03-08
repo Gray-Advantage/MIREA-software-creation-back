@@ -21,13 +21,13 @@ class Currency(StrEnum):
 
 class EmployeeCreate(BaseModel):
     email: EmailStr
-    password: str
     full_name: str
     phone: str | None = None
     position: str
     rate_type: RateType
     rate_amount: Decimal
     currency: Currency
+    avatar: str | None = None
     schedule: list[ScheduleEntry] = []
 
     model_config = {
@@ -35,16 +35,16 @@ class EmployeeCreate(BaseModel):
             "examples": [
                 {
                     "email": "ivanov@example.com",
-                    "password": "securePass123",
                     "full_name": "Иванов Иван Иванович",
                     "phone": "+79991234567",
                     "position": "Бариста",
                     "rate_type": "hourly",
                     "rate_amount": 350,
                     "currency": "RUB",
+                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
                     "schedule": [
                         {
-                            "date": "2026-03-10",
+                            "date": "2026-04-10",
                             "start_time": "09:00:00",
                             "end_time": "18:00:00",
                         },
@@ -64,11 +64,40 @@ class EmployeeProfileRead(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
     currency: str
+    avatar_url: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
     schedule: list[ScheduleRead] = []
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": 1,
+                    "user_id": 10,
+                    "full_name": "Иванов Иван Иванович",
+                    "phone": "+79991234567",
+                    "position": "Бариста",
+                    "rate_type": "hourly",
+                    "rate_amount": "350.00",
+                    "currency": "RUB",
+                    "avatar_url": "/api/employees/10/avatar",
+                    "created_at": "2026-03-01T12:00:00Z",
+                    "updated_at": None,
+                    "schedule": [
+                        {
+                            "date": "2026-04-10",
+                            "start_time": "09:00:00",
+                            "end_time": "18:00:00",
+                            "rate_type": "hourly",
+                            "rate_amount": "350.00",
+                        },
+                    ],
+                },
+            ],
+        },
+    }
 
 
 class EmployeeRead(BaseModel):
@@ -79,7 +108,42 @@ class EmployeeRead(BaseModel):
     monthly_salary: Decimal
     final_salary: Decimal
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": 10,
+                    "email": "ivanov@example.com",
+                    "is_active": True,
+                    "profile": {
+                        "id": 1,
+                        "user_id": 10,
+                        "full_name": "Иванов Иван Иванович",
+                        "phone": "+79991234567",
+                        "position": "Бариста",
+                        "rate_type": "hourly",
+                        "rate_amount": "350.00",
+                        "currency": "RUB",
+                        "avatar_url": "/api/employees/10/avatar",
+                        "created_at": "2026-03-01T12:00:00Z",
+                        "updated_at": None,
+                        "schedule": [
+                            {
+                                "date": "2026-04-10",
+                                "start_time": "09:00:00",
+                                "end_time": "18:00:00",
+                                "rate_type": "hourly",
+                                "rate_amount": "350.00",
+                            },
+                        ],
+                    },
+                    "monthly_salary": "3150.00",
+                    "final_salary": "3650.00",
+                },
+            ],
+        },
+    }
 
 
 class EmployeeUpdate(BaseModel):
@@ -90,8 +154,50 @@ class EmployeeUpdate(BaseModel):
     rate_amount: Decimal | None = None
     currency: Currency | None = None
     is_active: bool | None = None
+    avatar: str | None = None
     schedule: list[ScheduleEntry] | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "full_name": "Иванов Иван Петрович",
+                    "rate_amount": 400,
+                },
+                {
+                    "schedule": [
+                        {
+                            "date": "2026-04-15",
+                            "start_time": "10:00:00",
+                            "end_time": "19:00:00",
+                        },
+                        {
+                            "date": "2026-04-16",
+                            "start_time": "10:00:00",
+                            "end_time": "19:00:00",
+                        },
+                    ],
+                },
+                {
+                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
+                },
+                {
+                    "is_active": False,
+                },
+            ],
+        },
+    }
 
 
 class PasswordChange(BaseModel):
     new_password: str
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "new_password": "newSecurePass456",
+                },
+            ],
+        },
+    }

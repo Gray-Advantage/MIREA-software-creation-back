@@ -26,7 +26,6 @@ EMPLOYEE_PASSWORD = "employeepass123"
 
 EMPLOYEE_PAYLOAD: dict[str, Any] = {
     "email": EMPLOYEE_EMAIL,
-    "password": EMPLOYEE_PASSWORD,
     "full_name": "Тестовый Сотрудник",
     "phone": "+79991234567",
     "position": "Разработчик",

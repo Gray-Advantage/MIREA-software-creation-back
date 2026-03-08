@@ -180,3 +180,4 @@ __marimo__/
 
 # Docker
 docker/pg_data/
+docker/minio_data/

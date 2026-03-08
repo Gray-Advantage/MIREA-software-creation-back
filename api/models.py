@@ -91,6 +91,10 @@ class EmployeeProfile(Base):
     rate_type: Mapped[str] = mapped_column(String(20))
     rate_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3))
+    avatar_key: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
