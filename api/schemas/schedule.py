@@ -1,4 +1,5 @@
 import datetime as _dt
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -10,6 +11,9 @@ class ScheduleEntry(BaseModel):
 
 
 class ScheduleRead(ScheduleEntry):
+    rate_type: str
+    rate_amount: Decimal
+
     model_config = {"from_attributes": True}
 
 

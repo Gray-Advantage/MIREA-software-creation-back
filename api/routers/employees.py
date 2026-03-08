@@ -1,16 +1,24 @@
 import datetime as _dt
+from decimal import Decimal
 from typing import Annotated
 
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from api.database import get_async_session
 from api.deps import require_admin
-from api.models import EmployeeProfile, Schedule, User
+from api.models import (
+    Adjustment,
+    ApiSession,
+    EmployeeProfile,
+    Schedule,
+    TimeEntry,
+    User,
+)
 from api.schemas.employee import (
     EmployeeCreate,
     EmployeeRead,
@@ -30,6 +38,103 @@ def _schedule_date_range(month: str | None) -> tuple[_dt.date, _dt.date]:
         start = today.replace(day=1) - relativedelta(months=1)
         end = today.replace(day=1) + relativedelta(months=2) - _dt.timedelta(days=1)
     return start, end
+
+
+def _compute_monthly_salary(
+    schedule: list[Schedule],
+    month: str | None,
+) -> Decimal:
+    if month:
+        year, m = map(int, month.split("-"))
+    else:
+        today = _dt.datetime.now(_dt.UTC).date()
+        year, m = today.year, today.month
+
+    entries = [s for s in schedule if s.date.year == year and s.date.month == m]
+
+    total = Decimal(0)
+    for entry in entries:
+        if entry.rate_type == "hourly":
+            start = _dt.datetime.combine(_dt.date.min, entry.start_time)
+            end = _dt.datetime.combine(_dt.date.min, entry.end_time)
+            diff = end - start
+            if diff.total_seconds() < 0:
+                diff += _dt.timedelta(days=1)
+            hours = Decimal(str(diff.total_seconds() / 3600))
+            total += hours * entry.rate_amount
+        else:
+            total += entry.rate_amount
+
+    return total.quantize(Decimal("0.01"))
+
+
+def _compute_final_salary(
+    monthly_salary: Decimal,
+    adjustments: list[Adjustment],
+) -> Decimal:
+    bonuses = sum(
+        (a.amount for a in adjustments if a.type == "bonus"),
+        Decimal(0),
+    )
+    fines = sum(
+        (a.amount for a in adjustments if a.type == "fine"),
+        Decimal(0),
+    )
+    return (monthly_salary + bonuses - fines).quantize(Decimal("0.01"))
+
+
+async def _load_adjustments_for_month(
+    db: AsyncSession,
+    profile_ids: list[int],
+    month: str | None,
+) -> dict[int, list[Adjustment]]:
+    if not profile_ids:
+        return {}
+    if month:
+        year, m = map(int, month.split("-"))
+    else:
+        today = _dt.datetime.now(_dt.UTC).date()
+        year, m = today.year, today.month
+
+    rows = await db.execute(
+        select(Adjustment).where(
+            Adjustment.employee_id.in_(profile_ids),
+            extract("year", Adjustment.date) == year,
+            extract("month", Adjustment.date) == m,
+        ),
+    )
+    by_profile: dict[int, list[Adjustment]] = {}
+    for a in rows.scalars().all():
+        by_profile.setdefault(a.employee_id, []).append(a)
+    return by_profile
+
+
+def _filter_past_schedule(profile: EmployeeProfile) -> None:
+    today = _dt.datetime.now(_dt.UTC).date()
+    set_committed_value(
+        profile,
+        "schedule",
+        [s for s in profile.schedule if s.date >= today],
+    )
+
+
+def _build_employee_response(
+    user: User,
+    profile: EmployeeProfile,
+    month: str | None = None,
+    adjustments: list[Adjustment] | None = None,
+) -> EmployeeRead:
+    salary = _compute_monthly_salary(profile.schedule, month)
+    final = _compute_final_salary(salary, adjustments or [])
+    _filter_past_schedule(profile)
+    return EmployeeRead(
+        id=user.id,
+        email=user.email,
+        is_active=user.is_active,
+        profile=profile,
+        monthly_salary=salary,
+        final_salary=final,
+    )
 
 
 router = APIRouter()
@@ -74,13 +179,18 @@ async def list_employees(
 
     profiles = [u.profile for u in users if u.profile is not None]
     await _load_schedule_filtered(db, profiles, month)
+    adj_map = await _load_adjustments_for_month(
+        db,
+        [p.id for p in profiles],
+        month,
+    )
 
     return [
-        EmployeeRead(
-            id=u.id,
-            email=u.email,
-            is_active=u.is_active,
-            profile=u.profile,
+        _build_employee_response(
+            u,
+            u.profile,
+            month,
+            adj_map.get(u.profile.id, []),
         )
         for u in users
         if u.profile is not None
@@ -129,7 +239,13 @@ async def create_employee(
         set_committed_value(
             profile,
             "schedule",
-            await _replace_schedule(db, profile.id, schedule_dicts),
+            await _replace_schedule(
+                db,
+                profile.id,
+                schedule_dicts,
+                body.rate_type.value,
+                body.rate_amount,
+            ),
         )
 
     await db.commit()
@@ -137,18 +253,15 @@ async def create_employee(
     await db.refresh(profile)
     await _load_schedule_filtered(db, [profile], None)
 
-    return EmployeeRead(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active,
-        profile=profile,
-    )
+    return _build_employee_response(user, profile, adjustments=[])
 
 
 async def _replace_schedule(
     db: AsyncSession,
     profile_id: int,
     entries: list[dict[str, object]],
+    rate_type: str,
+    rate_amount: Decimal,
 ) -> list[Schedule]:
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile_id),
@@ -160,6 +273,8 @@ async def _replace_schedule(
                 date=entry["date"],
                 start_time=entry["start_time"],
                 end_time=entry["end_time"],
+                rate_type=rate_type,
+                rate_amount=rate_amount,
             ),
         )
     await db.flush()
@@ -231,11 +346,16 @@ async def get_employee(
     ] = None,
 ) -> EmployeeRead:
     user = await _get_employee_user(employee_id, admin, db, month)
-    return EmployeeRead(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active,
-        profile=user.profile,
+    adj_map = await _load_adjustments_for_month(
+        db,
+        [user.profile.id],
+        month,
+    )
+    return _build_employee_response(
+        user,
+        user.profile,
+        month,
+        adj_map.get(user.profile.id, []),
     )
 
 
@@ -267,19 +387,25 @@ async def update_employee(
         set_committed_value(
             profile,
             "schedule",
-            await _replace_schedule(db, profile.id, new_schedule),
+            await _replace_schedule(
+                db,
+                profile.id,
+                new_schedule,
+                profile.rate_type,
+                profile.rate_amount,
+            ),
         )
 
     await db.commit()
     await db.refresh(user)
     await db.refresh(profile)
     await _load_schedule_filtered(db, [profile], None)
+    adj_map = await _load_adjustments_for_month(db, [profile.id], None)
 
-    return EmployeeRead(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active,
-        profile=profile,
+    return _build_employee_response(
+        user,
+        profile,
+        adjustments=adj_map.get(profile.id, []),
     )
 
 
@@ -290,7 +416,24 @@ async def delete_employee(
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> None:
     user = await _get_employee_user(employee_id, admin, db)
-    user.is_active = False
+    profile = user.profile
+
+    await db.execute(
+        delete(Schedule).where(Schedule.employee_id == profile.id),
+    )
+    await db.execute(
+        delete(Adjustment).where(Adjustment.employee_id == profile.id),
+    )
+    await db.execute(
+        delete(TimeEntry).where(TimeEntry.employee_id == profile.id),
+    )
+    await db.execute(
+        delete(EmployeeProfile).where(EmployeeProfile.id == profile.id),
+    )
+    await db.execute(
+        delete(ApiSession).where(ApiSession.user_id == user.id),
+    )
+    await db.execute(delete(User).where(User.id == user.id))
     await db.commit()
 
 

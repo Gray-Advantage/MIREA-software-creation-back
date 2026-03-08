@@ -76,6 +76,8 @@ class EmployeeRead(BaseModel):
     email: str
     is_active: bool
     profile: EmployeeProfileRead
+    monthly_salary: Decimal
+    final_salary: Decimal
 
     model_config = {"from_attributes": True}
 

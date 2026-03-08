@@ -121,6 +121,16 @@ class Schedule(models.Model):
     date = models.DateField("Дата")
     start_time = models.TimeField("Начало")
     end_time = models.TimeField("Конец")
+    rate_type = models.CharField(
+        "Тип ставки",
+        max_length=20,
+        choices=RATE_TYPE_CHOICES,
+    )
+    rate_amount = models.DecimalField(
+        "Ставка",
+        max_digits=10,
+        decimal_places=2,
+    )
 
     class Meta:
         managed = False

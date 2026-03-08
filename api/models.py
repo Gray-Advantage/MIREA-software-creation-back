@@ -130,6 +130,8 @@ class Schedule(Base):
     date: Mapped[date] = mapped_column(Date)
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
+    rate_type: Mapped[str] = mapped_column(String(20))
+    rate_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
     employee: Mapped[EmployeeProfile] = relationship(
         back_populates="schedule",

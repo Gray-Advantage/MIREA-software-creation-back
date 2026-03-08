@@ -37,7 +37,7 @@ class TestLogin(TestView):
         )
 
         assert response.status_code == HTTPStatus.UNAUTHORIZED
-        assert response.json()["detail"] == "Invalid email or password"
+        assert response.json() == {"detail": "Invalid email or password"}
 
     async def test_error__when_user_not_found(
         self,
@@ -52,7 +52,7 @@ class TestLogin(TestView):
         )
 
         assert response.status_code == HTTPStatus.UNAUTHORIZED
-        assert response.json()["detail"] == "Invalid email or password"
+        assert response.json() == {"detail": "Invalid email or password"}
 
     async def test_error__when_user_deactivated(
         self,
@@ -69,4 +69,4 @@ class TestLogin(TestView):
         )
 
         assert response.status_code == HTTPStatus.FORBIDDEN
-        assert response.json()["detail"] == "Account is deactivated"
+        assert response.json() == {"detail": "Account is deactivated"}

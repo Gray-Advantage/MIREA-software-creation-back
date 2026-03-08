@@ -50,7 +50,9 @@ class TestRegister(TestView):
         response = await self.request(client, json=REGISTER_PAYLOAD)
 
         assert response.status_code == HTTPStatus.CONFLICT
-        assert response.json()["detail"] == "Company with this email already exists"
+        assert response.json() == {
+            "detail": "Company with this email already exists",
+        }
 
     async def test_error__when_user_email_already_exists(
         self,
@@ -67,4 +69,6 @@ class TestRegister(TestView):
         response = await self.request(client, json=payload)
 
         assert response.status_code == HTTPStatus.CONFLICT
-        assert response.json()["detail"] == "User with this email already exists"
+        assert response.json() == {
+            "detail": "User with this email already exists",
+        }
