@@ -1,4 +1,3 @@
-import base64
 import datetime as _dt
 import secrets
 import uuid
@@ -6,7 +5,15 @@ from decimal import Decimal
 from typing import Annotated
 
 from dateutil.relativedelta import relativedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -114,45 +121,10 @@ async def _load_adjustments_for_month(
     return by_profile
 
 
-async def _upload_avatar(
-    profile: EmployeeProfile,
-    avatar_b64: str,
-) -> None:
-    if avatar_b64.startswith("data:"):
-        header, b64_data = avatar_b64.split(",", 1)
-        content_type = header.split(":")[1].split(";")[0]
-    else:
-        b64_data = avatar_b64
-        content_type = "image/jpeg"
-
-    data = base64.b64decode(b64_data)
-    ext = content_type.split("/")[-1]
-    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
-
-    if profile.avatar_key:
-        await s3.delete(profile.avatar_key)
-
-    await s3.upload(key, data, content_type)
-    profile.avatar_key = key
-
-
 async def _delete_avatar(profile: EmployeeProfile) -> None:
     if profile.avatar_key:
         await s3.delete(profile.avatar_key)
         profile.avatar_key = None
-
-
-async def _handle_avatar_field(
-    profile: EmployeeProfile,
-    update_data: dict[str, object],
-) -> None:
-    if "avatar" not in update_data:
-        return
-    value = update_data.pop("avatar")
-    if value is None:
-        await _delete_avatar(profile)
-    else:
-        await _upload_avatar(profile, value)
 
 
 def _build_employee_response(
@@ -180,16 +152,15 @@ def _build_employee_response(
     )
 
 
-def _apply_search_filters(  # noqa: C901, PLR0913
+def _apply_search_filters(  # noqa: C901
     query: select,
     *,
     q: str | None,
     full_name: str | None,
-    phone: str | None,
-    email: str | None,
+    contact: str | None,
     position: str | None,
 ) -> select:
-    has_specific = any(f and f.strip() for f in [full_name, phone, position])
+    has_specific = any(f and f.strip() for f in [full_name, contact, position])
     has_q = bool(q and q.strip())
 
     if has_specific or has_q:
@@ -211,10 +182,11 @@ def _apply_search_filters(  # noqa: C901, PLR0913
 
     if full_name and (term := full_name.strip()):
         query = query.where(EmployeeProfile.full_name.ilike(f"%{term}%"))
-    if phone and (term := phone.strip()):
-        query = query.where(EmployeeProfile.phone.ilike(f"%{term}%"))
-    if email and (term := email.strip()):
-        query = query.where(User.email.ilike(f"%{term}%"))
+    if contact and (term := contact.strip()):
+        pat = f"%{term}%"
+        query = query.where(
+            or_(User.email.ilike(pat), EmployeeProfile.phone.ilike(pat)),
+        )
     if position and (term := position.strip()):
         query = query.where(EmployeeProfile.position.ilike(f"%{term}%"))
     return query
@@ -235,13 +207,9 @@ async def list_employees(  # noqa: PLR0913
         str | None,
         Query(description="Фильтр по ФИО"),
     ] = None,
-    phone: Annotated[
+    contact: Annotated[
         str | None,
-        Query(description="Фильтр по телефону"),
-    ] = None,
-    email: Annotated[
-        str | None,
-        Query(description="Фильтр по email"),
+        Query(description="Фильтр по email / телефону"),
     ] = None,
     position: Annotated[
         str | None,
@@ -265,8 +233,7 @@ async def list_employees(  # noqa: PLR0913
         query,
         q=q,
         full_name=full_name,
-        phone=phone,
-        email=email,
+        contact=contact,
         position=position,
     )
 
@@ -330,9 +297,6 @@ async def create_employee(
     )
     db.add(profile)
     await db.flush()
-
-    if body.avatar:
-        await _upload_avatar(profile, body.avatar)
 
     if body.schedule:
         schedule_dicts = [e.model_dump() for e in body.schedule]
@@ -478,7 +442,6 @@ async def update_employee(
     new_schedule = update_data.pop("schedule", None)
 
     profile = user.profile
-    await _handle_avatar_field(profile, update_data)
 
     for field, value in update_data.items():
         if hasattr(profile, field):
@@ -513,6 +476,31 @@ async def update_employee(
         profile,
         adjustments=adj_map.get(profile.id, []),
     )
+
+
+@router.put("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
+async def upload_avatar(
+    employee_id: int,
+    file: UploadFile,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict[str, str]:
+    user = await _get_employee_user(employee_id, admin, db)
+    profile = user.profile
+
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
+
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
+
+    await s3.upload(key, data, content_type)
+    profile.avatar_key = key
+    await db.commit()
+
+    return {"avatar_url": f"/api/employees/{user.id}/avatar"}
 
 
 @router.get("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})

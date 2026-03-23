@@ -27,7 +27,6 @@ class EmployeeCreate(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
     currency: Currency
-    avatar: str | None = None
     schedule: list[ScheduleEntry] = []
 
     model_config = {
@@ -41,7 +40,6 @@ class EmployeeCreate(BaseModel):
                     "rate_type": "hourly",
                     "rate_amount": 350,
                     "currency": "RUB",
-                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
                     "schedule": [
                         {
                             "date": "2026-04-10",
@@ -156,7 +154,6 @@ class EmployeeUpdate(BaseModel):
     rate_amount: Decimal | None = None
     currency: Currency | None = None
     is_active: bool | None = None
-    avatar: str | None = None
     schedule: list[ScheduleEntry] | None = None
 
     model_config = {
@@ -179,9 +176,6 @@ class EmployeeUpdate(BaseModel):
                             "end_time": "19:00:00",
                         },
                     ],
-                },
-                {
-                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
                 },
                 {
                     "is_active": False,

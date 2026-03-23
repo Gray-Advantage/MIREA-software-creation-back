@@ -65,31 +65,44 @@ class TestListEmployees(AuthTestView):
         assert response.status_code == HTTPStatus.OK
         assert len(response.json()) == 1
 
-    async def test_success__search_by_email(
+    async def test_success__search_contact_by_email(
         self,
         auth_client: AsyncClient,
         employee_user: User,
     ) -> None:
         response = await self.request(
             auth_client,
-            params={"email": "employee@"},
+            params={"contact": "employee@"},
         )
 
         assert response.status_code == HTTPStatus.OK
         assert len(response.json()) == 1
 
-    async def test_success__search_by_phone(
+    async def test_success__search_contact_by_phone(
         self,
         auth_client: AsyncClient,
         employee_user: User,
     ) -> None:
         response = await self.request(
             auth_client,
-            params={"phone": "+7999"},
+            params={"contact": "+7999"},
         )
 
         assert response.status_code == HTTPStatus.OK
         assert len(response.json()) == 1
+
+    async def test_success__search_contact_no_match(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"contact": "nonexistent"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == []
 
     async def test_success__search_by_position(
         self,
