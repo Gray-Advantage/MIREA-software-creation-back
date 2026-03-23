@@ -28,6 +28,7 @@ from api.schemas.employee import (
     EmployeeUpdate,
     PasswordChange,
 )
+from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND, R_409
 from api.services import s3
 from api.services.auth import hash_password
 
@@ -113,15 +114,6 @@ async def _load_adjustments_for_month(
     return by_profile
 
 
-def _filter_past_schedule(profile: EmployeeProfile) -> None:
-    today = _dt.datetime.now(_dt.UTC).date()
-    set_committed_value(
-        profile,
-        "schedule",
-        [s for s in profile.schedule if s.date >= today],
-    )
-
-
 async def _upload_avatar(
     profile: EmployeeProfile,
     avatar_b64: str,
@@ -171,7 +163,6 @@ def _build_employee_response(
 ) -> EmployeeRead:
     salary = _compute_monthly_salary(profile.schedule, month)
     final = _compute_final_salary(salary, adjustments or [])
-    _filter_past_schedule(profile)
 
     from api.schemas.employee import EmployeeProfileRead
 
@@ -189,16 +180,72 @@ def _build_employee_response(
     )
 
 
+def _apply_search_filters(  # noqa: C901, PLR0913
+    query: select,
+    *,
+    q: str | None,
+    full_name: str | None,
+    phone: str | None,
+    email: str | None,
+    position: str | None,
+) -> select:
+    has_specific = any(f and f.strip() for f in [full_name, phone, position])
+    has_q = bool(q and q.strip())
+
+    if has_specific or has_q:
+        query = query.join(
+            EmployeeProfile,
+            User.id == EmployeeProfile.user_id,
+        )
+
+    if has_q:
+        term = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                User.email.ilike(term),
+                EmployeeProfile.full_name.ilike(term),
+                EmployeeProfile.phone.ilike(term),
+                EmployeeProfile.position.ilike(term),
+            ),
+        )
+
+    if full_name and (term := full_name.strip()):
+        query = query.where(EmployeeProfile.full_name.ilike(f"%{term}%"))
+    if phone and (term := phone.strip()):
+        query = query.where(EmployeeProfile.phone.ilike(f"%{term}%"))
+    if email and (term := email.strip()):
+        query = query.where(User.email.ilike(f"%{term}%"))
+    if position and (term := position.strip()):
+        query = query.where(EmployeeProfile.position.ilike(f"%{term}%"))
+    return query
+
+
 router = APIRouter()
 
 
-@router.get("")
-async def list_employees(
+@router.get("", responses={**ADMIN})
+async def list_employees(  # noqa: PLR0913
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     q: Annotated[
         str | None,
-        Query(description="Поиск по email, ФИО, телефону, должности"),
+        Query(description="Общий поиск по email, ФИО, телефону, должности"),
+    ] = None,
+    full_name: Annotated[
+        str | None,
+        Query(description="Фильтр по ФИО"),
+    ] = None,
+    phone: Annotated[
+        str | None,
+        Query(description="Фильтр по телефону"),
+    ] = None,
+    email: Annotated[
+        str | None,
+        Query(description="Фильтр по email"),
+    ] = None,
+    position: Annotated[
+        str | None,
+        Query(description="Фильтр по должности"),
     ] = None,
     month: Annotated[
         str | None,
@@ -213,19 +260,16 @@ async def list_employees(
         .options(joinedload(User.profile))
         .where(User.company_id == admin.company_id, User.role == "employee")
     )
-    if q and (term := q.strip()):
-        term = f"%{term}%"
-        query = query.join(
-            EmployeeProfile,
-            User.id == EmployeeProfile.user_id,
-        ).where(
-            or_(
-                User.email.ilike(term),
-                EmployeeProfile.full_name.ilike(term),
-                EmployeeProfile.phone.ilike(term),
-                EmployeeProfile.position.ilike(term),
-            ),
-        )
+
+    query = _apply_search_filters(
+        query,
+        q=q,
+        full_name=full_name,
+        phone=phone,
+        email=email,
+        position=position,
+    )
+
     result = await db.execute(query)
     users = result.unique().scalars().all()
 
@@ -252,6 +296,7 @@ async def list_employees(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    responses={**ADMIN, **R_409},
 )
 async def create_employee(
     body: EmployeeCreate,
@@ -300,6 +345,7 @@ async def create_employee(
                 schedule_dicts,
                 body.rate_type.value,
                 body.rate_amount,
+                body.currency.value,
             ),
         )
 
@@ -311,12 +357,13 @@ async def create_employee(
     return _build_employee_response(user, profile, adjustments=[])
 
 
-async def _replace_schedule(
+async def _replace_schedule(  # noqa: PLR0913
     db: AsyncSession,
     profile_id: int,
     entries: list[dict[str, object]],
     rate_type: str,
     rate_amount: Decimal,
+    currency: str,
 ) -> list[Schedule]:
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile_id),
@@ -330,6 +377,7 @@ async def _replace_schedule(
                 end_time=entry["end_time"],
                 rate_type=rate_type,
                 rate_amount=rate_amount,
+                currency=currency,
             ),
         )
     await db.flush()
@@ -387,7 +435,7 @@ async def _get_employee_user(
     return user
 
 
-@router.get("/{employee_id}")
+@router.get("/{employee_id}", responses={**ADMIN_NOT_FOUND})
 async def get_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -414,7 +462,7 @@ async def get_employee(
     )
 
 
-@router.patch("/{employee_id}")
+@router.patch("/{employee_id}", responses={**ADMIN_NOT_FOUND})
 async def update_employee(
     employee_id: int,
     body: EmployeeUpdate,
@@ -450,6 +498,7 @@ async def update_employee(
                 new_schedule,
                 profile.rate_type,
                 profile.rate_amount,
+                profile.currency,
             ),
         )
 
@@ -466,7 +515,7 @@ async def update_employee(
     )
 
 
-@router.get("/{employee_id}/avatar")
+@router.get("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
 async def get_avatar(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -485,6 +534,7 @@ async def get_avatar(
 @router.delete(
     "/{employee_id}/avatar",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
 )
 async def delete_avatar(
     employee_id: int,
@@ -496,7 +546,11 @@ async def delete_avatar(
     await db.commit()
 
 
-@router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{employee_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
+)
 async def delete_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -527,7 +581,7 @@ async def delete_employee(
     await db.commit()
 
 
-@router.patch("/{employee_id}/password")
+@router.patch("/{employee_id}/password", responses={**ADMIN_NOT_FOUND})
 async def change_employee_password(
     employee_id: int,
     body: PasswordChange,

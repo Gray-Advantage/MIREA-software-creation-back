@@ -13,6 +13,7 @@ from api.models import ApiSession, Company, User
 from api.schemas.auth import LoginRequest, MeResponse, RegisterRequest
 from api.schemas.company import CompanyRead
 from api.schemas.employee import EmployeeProfileRead
+from api.schemas.responses import R_401, R_403, R_409
 from api.services.auth import hash_password, verify_password
 
 router = APIRouter()
@@ -20,7 +21,7 @@ router = APIRouter()
 SESSION_TTL_DAYS = 30
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED, responses={**R_409})
 async def register(
     body: RegisterRequest,
     response: Response,
@@ -51,6 +52,8 @@ async def register(
         contact_name=body.company.contact_name,
         business_area=body.company.business_area,
         email=body.company.email,
+        inn=body.company.inn,
+        bik=body.company.bik,
     )
     db.add(company)
     await db.flush()
@@ -83,7 +86,7 @@ async def register(
     return {"detail": "Registered successfully", "user_id": user.id}
 
 
-@router.post("/login")
+@router.post("/login", responses={**R_401, **R_403})
 async def login(
     body: LoginRequest,
     response: Response,
@@ -123,7 +126,7 @@ async def login(
     return {"detail": "Logged in", "role": user.role}
 
 
-@router.post("/logout")
+@router.post("/logout", responses={**R_401})
 async def logout(
     response: Response,
     user: Annotated[User, Depends(get_current_user)],
@@ -134,7 +137,7 @@ async def logout(
     return {"detail": "Logged out"}
 
 
-@router.get("/me")
+@router.get("/me", responses={**R_401})
 async def me(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],

@@ -57,7 +57,10 @@ class TestListEmployees(AuthTestView):
         auth_client: AsyncClient,
         employee_user: User,
     ) -> None:
-        response = await self.request(auth_client, params={"q": "Тестовый"})
+        response = await self.request(
+            auth_client,
+            params={"full_name": "Тестовый"},
+        )
 
         assert response.status_code == HTTPStatus.OK
         assert len(response.json()) == 1
@@ -67,17 +70,101 @@ class TestListEmployees(AuthTestView):
         auth_client: AsyncClient,
         employee_user: User,
     ) -> None:
-        response = await self.request(auth_client, params={"q": "employee@"})
+        response = await self.request(
+            auth_client,
+            params={"email": "employee@"},
+        )
 
         assert response.status_code == HTTPStatus.OK
         assert len(response.json()) == 1
+
+    async def test_success__search_by_phone(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"phone": "+7999"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()) == 1
+
+    async def test_success__search_by_position(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"position": "Разработчик"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()) == 1
+
+    async def test_success__search_combined(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"full_name": "Тестовый", "position": "Разработчик"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()) == 1
+
+    async def test_success__q_by_name(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"q": "Тестовый"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()) == 1
+
+    async def test_success__q_by_email(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"q": "employee@"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json()) == 1
+
+    async def test_success__q_no_match(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            params={"q": "Несуществующий"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == []
 
     async def test_success__search_no_match(
         self,
         auth_client: AsyncClient,
         employee_user: User,
     ) -> None:
-        response = await self.request(auth_client, params={"q": "Несуществующий"})
+        response = await self.request(
+            auth_client,
+            params={"full_name": "Несуществующий"},
+        )
 
         assert response.status_code == HTTPStatus.OK
         assert response.json() == []

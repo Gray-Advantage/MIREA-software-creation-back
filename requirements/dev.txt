@@ -1,5 +1,6 @@
 -r api.txt
 -r base.txt
 -r django.txt
+-r test.txt
 
 ruff==0.15.4

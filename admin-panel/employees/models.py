@@ -131,6 +131,11 @@ class Schedule(models.Model):
         max_digits=10,
         decimal_places=2,
     )
+    currency = models.CharField(
+        "Валюта",
+        max_length=3,
+        choices=CURRENCY_CHOICES,
+    )
 
     class Meta:
         managed = False

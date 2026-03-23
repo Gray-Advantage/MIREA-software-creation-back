@@ -1,42 +1,45 @@
+import datetime as _dt
 from decimal import Decimal
 
 from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models import Adjustment, EmployeeProfile, TimeEntry
+from api.models import Adjustment, EmployeeProfile, Schedule
 
 
-async def calculate_work_quantity(
+async def _compute_schedule_salary(
     db: AsyncSession,
-    employee: EmployeeProfile,
+    employee_id: int,
     year: int,
     month: int,
-) -> Decimal:
+) -> tuple[Decimal, Decimal]:
     result = await db.execute(
-        select(TimeEntry).where(
-            TimeEntry.employee_id == employee.id,
-            extract("year", TimeEntry.date) == year,
-            extract("month", TimeEntry.date) == month,
-            TimeEntry.check_out.is_not(None),
+        select(Schedule).where(
+            Schedule.employee_id == employee_id,
+            extract("year", Schedule.date) == year,
+            extract("month", Schedule.date) == month,
         ),
     )
     entries = result.scalars().all()
 
-    if employee.rate_type == "hourly":
-        total_hours = Decimal(0)
-        for entry in entries:
-            delta = entry.check_out - entry.check_in
-            total_hours += Decimal(str(delta.total_seconds())) / Decimal(3600)
-        return total_hours.quantize(Decimal("0.01"))
+    total = Decimal(0)
+    quantity = Decimal(0)
+    for entry in entries:
+        if entry.rate_type == "hourly":
+            start = _dt.datetime.combine(_dt.date.min, entry.start_time)
+            end = _dt.datetime.combine(_dt.date.min, entry.end_time)
+            diff = end - start
+            if diff.total_seconds() < 0:
+                diff += _dt.timedelta(days=1)
+            hours = Decimal(str(diff.total_seconds() / 3600))
+            total += hours * entry.rate_amount
+            quantity += hours
+        else:
+            total += entry.rate_amount
+            quantity += 1
 
-    if employee.rate_type == "shift":
-        return Decimal(len(entries))
-
-    if employee.rate_type == "daily":
-        unique_days = {e.date for e in entries}
-        return Decimal(len(unique_days))
-
-    return Decimal(0)
+    cents = Decimal("0.01")
+    return total.quantize(cents), quantity.quantize(cents)
 
 
 async def calculate_adjustments_sum(
@@ -63,7 +66,12 @@ async def calculate_salary(
     year: int,
     month: int,
 ) -> dict:
-    quantity = await calculate_work_quantity(db, employee, year, month)
+    base_salary, quantity = await _compute_schedule_salary(
+        db,
+        employee.id,
+        year,
+        month,
+    )
     bonuses = await calculate_adjustments_sum(
         db,
         employee.id,
@@ -79,7 +87,6 @@ async def calculate_salary(
         "fine",
     )
     cents = Decimal("0.01")
-    base_salary = (employee.rate_amount * quantity).quantize(cents)
     bonuses = Decimal(bonuses).quantize(cents)
     fines = Decimal(fines).quantize(cents)
     total = (base_salary + bonuses - fines).quantize(cents)
@@ -91,7 +98,7 @@ async def calculate_salary(
         "rate_type": employee.rate_type,
         "rate_amount": employee.rate_amount.quantize(cents),
         "currency": employee.currency,
-        "quantity": quantity.quantize(cents),
+        "quantity": quantity,
         "base_salary": base_salary,
         "bonuses": bonuses,
         "fines": fines,

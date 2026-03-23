@@ -12,6 +12,7 @@ from api.schemas.adjustment import (
     AdjustmentRead,
     AdjustmentUpdate,
 )
+from api.schemas.responses import ADMIN_NOT_FOUND
 
 router = APIRouter()
 
@@ -38,7 +39,7 @@ async def _verify_employee_belongs_to_company(
     return profile
 
 
-@router.get("/{employee_id}/adjustments")
+@router.get("/{employee_id}/adjustments", responses={**ADMIN_NOT_FOUND})
 async def list_adjustments(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -69,6 +70,7 @@ async def list_adjustments(
 @router.post(
     "/{employee_id}/adjustments",
     status_code=status.HTTP_201_CREATED,
+    responses={**ADMIN_NOT_FOUND},
 )
 async def create_adjustment(
     employee_id: int,
@@ -93,6 +95,7 @@ async def create_adjustment(
 
 @router.get(
     "/{employee_id}/adjustments/{adjustment_id}",
+    responses={**ADMIN_NOT_FOUND},
 )
 async def get_adjustment(
     employee_id: int,
@@ -119,6 +122,7 @@ async def get_adjustment(
 
 @router.patch(
     "/{employee_id}/adjustments/{adjustment_id}",
+    responses={**ADMIN_NOT_FOUND},
 )
 async def update_adjustment(
     employee_id: int,
@@ -158,6 +162,7 @@ async def update_adjustment(
 @router.delete(
     "/{employee_id}/adjustments/{adjustment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
 )
 async def delete_adjustment(
     employee_id: int,

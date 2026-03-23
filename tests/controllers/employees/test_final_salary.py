@@ -79,6 +79,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         await session.flush()
@@ -115,6 +116,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -161,6 +163,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -208,6 +211,7 @@ class TestFinalSalaryGet(AuthTestView):
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         session.add(
@@ -264,6 +268,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(17, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -341,6 +346,7 @@ class TestFinalSalaryShiftRate(AuthTestView):
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2000.00"),
+                    currency="RUB",
                 ),
             )
         session.add(
@@ -403,6 +409,7 @@ class TestFinalSalaryList(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -464,6 +471,7 @@ class TestMidMonthRateChange(AuthTestView):
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         for i in range(3, 6):
@@ -475,6 +483,7 @@ class TestMidMonthRateChange(AuthTestView):
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("700.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
@@ -533,6 +542,7 @@ class TestMidMonthRateChange(AuthTestView):
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2000.00"),
+                    currency="RUB",
                 ),
             )
         for i in range(2, 5):
@@ -544,6 +554,7 @@ class TestMidMonthRateChange(AuthTestView):
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2500.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
@@ -584,6 +595,7 @@ class TestMidMonthRateChange(AuthTestView):
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
