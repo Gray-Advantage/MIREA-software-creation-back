@@ -35,8 +35,10 @@ from api.schemas.employee import (
     PasswordChange,
 )
 from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND, R_409
+from api.schemas.statistics import CalcRequest, CalcResponse
 from api.services import s3
 from api.services.auth import hash_password
+from api.services.statistics import calculate_with_overrides
 
 
 def _schedule_date_range(month: str | None) -> tuple[_dt.date, _dt.date]:
@@ -528,6 +530,29 @@ async def change_employee_password(
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"detail": "Password changed"}
+
+
+@router.post("/{employee_id}/calculate", responses={**ADMIN_NOT_FOUND})
+async def calculate(
+    employee_id: int,
+    body: CalcRequest,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> CalcResponse:
+    user = await _get_employee_user(employee_id, admin, db)
+    year, m = map(int, body.month.split("-"))
+
+    data = await calculate_with_overrides(
+        db,
+        user.profile,
+        year,
+        m,
+        schedule_overrides=body.schedule,
+        exclude_dates=body.exclude_dates,
+        bonuses_override=body.bonuses,
+        fines_override=body.fines,
+    )
+    return CalcResponse(**data)
 
 
 @router.post("/avatar", responses={**ADMIN})

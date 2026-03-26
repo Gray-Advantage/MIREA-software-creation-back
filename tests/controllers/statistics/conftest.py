@@ -148,3 +148,49 @@ async def employee_with_schedule_and_adj(
     )
     await session.flush()
     return user, profile
+
+
+@pytest.fixture
+async def employee_with_future_schedule(
+    session: AsyncSession,
+    company: Company,
+) -> tuple[User, EmployeeProfile]:
+    user = User(
+        email="future_worker@test.com",
+        password_hash=hash_password("pass123"),
+        role="employee",
+        company_id=company.id,
+    )
+    session.add(user)
+    await session.flush()
+
+    profile = EmployeeProfile(
+        user_id=user.id,
+        full_name="Сидоров Сидор",
+        position="Кассир",
+        rate_type="hourly",
+        rate_amount=Decimal("500.00"),
+        currency="RUB",
+    )
+    session.add(profile)
+    await session.flush()
+
+    today = _dt.datetime.now(_dt.UTC).date()
+    next_month = (today.replace(day=1) + _dt.timedelta(days=32)).replace(day=1)
+    past_day = today - _dt.timedelta(days=3)
+    future_days = [next_month.replace(day=10 + i) for i in range(3)]
+
+    for d in [past_day, *future_days]:
+        session.add(
+            Schedule(
+                employee_id=profile.id,
+                date=d,
+                start_time=_dt.time(10, 0),
+                end_time=_dt.time(18, 0),
+                rate_type="hourly",
+                rate_amount=Decimal("500.00"),
+                currency="RUB",
+            ),
+        )
+    await session.flush()
+    return user, profile, past_day, future_days

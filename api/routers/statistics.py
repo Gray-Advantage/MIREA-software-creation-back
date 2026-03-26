@@ -10,13 +10,11 @@ from api.deps import require_admin
 from api.models import EmployeeProfile, User
 from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND
 from api.schemas.statistics import (
-    CalcRequest,
-    CalcResponse,
     EmployeeSalary,
     SalaryTableResponse,
     SummaryResponse,
 )
-from api.services.statistics import calculate_salary, calculate_with_overrides
+from api.services.statistics import calculate_salary
 
 router = APIRouter()
 
@@ -97,38 +95,3 @@ async def summary(
         total_employees=len(profiles),
         total_salary_fund=total_fund,
     )
-
-
-@router.post("/calculate", responses={**ADMIN_NOT_FOUND})
-async def calculate(
-    body: CalcRequest,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> CalcResponse:
-    year, m = map(int, body.month.split("-"))
-
-    result = await db.execute(
-        select(EmployeeProfile)
-        .join(User, EmployeeProfile.user_id == User.id)
-        .where(
-            EmployeeProfile.id == body.employee_id,
-            User.company_id == admin.company_id,
-        ),
-    )
-    profile = result.scalar_one_or_none()
-    if profile is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found",
-        )
-
-    data = await calculate_with_overrides(
-        db,
-        profile,
-        year,
-        m,
-        schedule_overrides=body.schedule,
-        bonuses_override=body.bonuses,
-        fines_override=body.fines,
-    )
-    return CalcResponse(**data)

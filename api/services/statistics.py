@@ -131,6 +131,7 @@ async def calculate_with_overrides(  # noqa: PLR0913
     month: int,
     *,
     schedule_overrides: list | None = None,
+    exclude_dates: list | None = None,
     bonuses_override: Decimal | None = None,
     fines_override: Decimal | None = None,
 ) -> dict:
@@ -142,6 +143,11 @@ async def calculate_with_overrides(  # noqa: PLR0913
         ),
     )
     db_entries = list(result.scalars().all())
+
+    today = _dt.datetime.now(_dt.UTC).date()
+    if exclude_dates:
+        excluded = set(exclude_dates)
+        db_entries = [e for e in db_entries if e.date not in excluded or e.date < today]
 
     if schedule_overrides:
         override_dates = {e.date for e in schedule_overrides}

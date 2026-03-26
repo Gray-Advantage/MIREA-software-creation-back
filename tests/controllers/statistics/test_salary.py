@@ -149,18 +149,30 @@ class TestSummary(AuthTestView):
 
 
 class TestCalculate(AuthTestView):
-    URL = "/api/statistics/calculate"
+    URL = "/api/employees/{employee_id}/calculate"
     METHOD = "POST"
+
+    async def test_error__when_unauthorized(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await self.request(
+            client,
+            path={"employee_id": 0},
+            json={"month": "2026-03"},
+        )
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
 
     async def test_error__employee_not_found(
         self,
         auth_client: AsyncClient,
     ) -> None:
-        payload = {
-            "employee_id": 99999,
-            "month": "2026-03",
-        }
-        response = await self.request(auth_client, json=payload)
+        payload = {"month": "2026-03"}
+        response = await self.request(
+            auth_client,
+            path={"employee_id": 99999},
+            json=payload,
+        )
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     async def test_success__no_overrides_uses_db(
@@ -168,18 +180,18 @@ class TestCalculate(AuthTestView):
         auth_client: AsyncClient,
         employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
-        _, profile = employee_with_schedule_and_adj
+        user, profile = employee_with_schedule_and_adj
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
 
-        payload = {
-            "employee_id": profile.id,
-            "month": month,
-        }
-        response = await self.request(auth_client, json=payload)
+        payload = {"month": month}
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
 
         assert response.status_code == HTTPStatus.OK
-        # 3 * 8h * 600 = 14400, + 1000 bonus - 300 fine = 15100
         assert response.json() == {
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
@@ -196,20 +208,18 @@ class TestCalculate(AuthTestView):
         auth_client: AsyncClient,
         employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
-        _, profile = employee_with_schedule_and_adj
+        user, profile = employee_with_schedule_and_adj
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
 
-        payload = {
-            "employee_id": profile.id,
-            "month": month,
-            "bonuses": 5000,
-            "fines": 0,
-        }
-        response = await self.request(auth_client, json=payload)
+        payload = {"month": month, "bonuses": 5000, "fines": 0}
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
 
         assert response.status_code == HTTPStatus.OK
-        # base stays 14400, overridden bonuses=5000, fines=0
         assert response.json() == {
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
@@ -226,15 +236,12 @@ class TestCalculate(AuthTestView):
         auth_client: AsyncClient,
         employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
-        _, profile = employee_with_schedule_and_adj
+        user, profile = employee_with_schedule_and_adj
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
 
-        # DB has 3 days at day 5,6,7 with rate 600/h and 8h shifts
-        # Override day 5 with rate 800/h (same hours)
         day5 = today.replace(day=5).isoformat()
         payload = {
-            "employee_id": profile.id,
             "month": month,
             "schedule": [
                 {
@@ -246,11 +253,13 @@ class TestCalculate(AuthTestView):
                 },
             ],
         }
-        response = await self.request(auth_client, json=payload)
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
 
         assert response.status_code == HTTPStatus.OK
-        # day5: 8h * 800 = 6400, day6: 8h * 600 = 4800, day7: 8h * 600 = 4800
-        # base = 16000, bonuses from DB = 1000, fines from DB = 300
         assert response.json() == {
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
@@ -267,14 +276,12 @@ class TestCalculate(AuthTestView):
         auth_client: AsyncClient,
         employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
-        _, profile = employee_with_schedule_and_adj
+        user, profile = employee_with_schedule_and_adj
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
 
-        # DB has days 5,6,7. Add day 10 — doesn't overlap, so it merges in.
         day10 = today.replace(day=10).isoformat()
         payload = {
-            "employee_id": profile.id,
             "month": month,
             "schedule": [
                 {
@@ -288,10 +295,13 @@ class TestCalculate(AuthTestView):
             "bonuses": 0,
             "fines": 0,
         }
-        response = await self.request(auth_client, json=payload)
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
 
         assert response.status_code == HTTPStatus.OK
-        # 4 days * 8h * 600 = 19200
         assert response.json() == {
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
@@ -308,13 +318,11 @@ class TestCalculate(AuthTestView):
         auth_client: AsyncClient,
         employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
-        _, profile = employee_with_schedule_and_adj
+        user, profile = employee_with_schedule_and_adj
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
 
-        # Override all 3 existing days + bonuses + fines
         payload = {
-            "employee_id": profile.id,
             "month": month,
             "schedule": [
                 {
@@ -342,10 +350,13 @@ class TestCalculate(AuthTestView):
             "bonuses": 500,
             "fines": 100,
         }
-        response = await self.request(auth_client, json=payload)
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
 
         assert response.status_code == HTTPStatus.OK
-        # 3 shifts * 3000 = 9000
         assert response.json() == {
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
@@ -356,3 +367,54 @@ class TestCalculate(AuthTestView):
             "fines": 100.0,
             "total": 9400.0,
         }
+
+    async def test_success__exclude_future_dates(
+        self,
+        auth_client: AsyncClient,
+        employee_with_future_schedule: tuple,
+    ) -> None:
+        user, _profile, _past_day, future_days = employee_with_future_schedule
+        month = future_days[0].strftime("%Y-%m")
+
+        payload = {
+            "month": month,
+            "exclude_dates": [d.isoformat() for d in future_days[1:]],
+        }
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data["quantity"] == ANY
+        assert data["base_salary"] == ANY
+        assert data["total"] == ANY
+        kept_days = 1
+        expected_base = kept_days * 8 * 500
+        assert data["base_salary"] == float(expected_base)
+
+    async def test_success__exclude_past_date_ignored(
+        self,
+        auth_client: AsyncClient,
+        employee_with_future_schedule: tuple,
+    ) -> None:
+        user, _profile, past_day, _future_days = employee_with_future_schedule
+        month = past_day.strftime("%Y-%m")
+
+        payload = {
+            "month": month,
+            "exclude_dates": [past_day.isoformat()],
+        }
+        response = await self.request(
+            auth_client,
+            path={"employee_id": user.id},
+            json=payload,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        kept_days = 1
+        expected_base = kept_days * 8 * 500
+        assert data["base_salary"] == float(expected_base)

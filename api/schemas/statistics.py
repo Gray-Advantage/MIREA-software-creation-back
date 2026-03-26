@@ -49,9 +49,9 @@ class CalcScheduleEntry(BaseModel):
 
 
 class CalcRequest(BaseModel):
-    employee_id: int
     month: str
     schedule: list[CalcScheduleEntry] | None = None
+    exclude_dates: list[_dt.date] | None = None
     bonuses: Decimal | None = None
     fines: Decimal | None = None
 
@@ -59,7 +59,6 @@ class CalcRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "employee_id": 1,
                     "month": "2026-04",
                     "schedule": [
                         {
@@ -70,6 +69,7 @@ class CalcRequest(BaseModel):
                             "rate_amount": 500,
                         },
                     ],
+                    "exclude_dates": ["2026-04-15", "2026-04-20"],
                     "bonuses": 1000,
                     "fines": 200,
                 },
