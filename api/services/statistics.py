@@ -110,15 +110,10 @@ async def calculate_salary(
     }
 
 
-def calculate_from_input(
-    schedule: list,
-    bonuses: Decimal,
-    fines: Decimal,
-    currency: str,
-) -> dict:
+def _compute_entries_salary(entries: list) -> tuple[Decimal, Decimal]:
     total = Decimal(0)
     quantity = Decimal(0)
-    for entry in schedule:
+    for entry in entries:
         if entry.rate_type == "hourly":
             hours = _entry_hours(entry.start_time, entry.end_time)
             total += hours * entry.rate_amount
@@ -126,15 +121,57 @@ def calculate_from_input(
         else:
             total += entry.rate_amount
             quantity += 1
+    return total.quantize(CENTS), quantity.quantize(CENTS)
 
-    base_salary = total.quantize(CENTS)
-    quantity = quantity.quantize(CENTS)
-    bonuses = bonuses.quantize(CENTS)
-    fines = fines.quantize(CENTS)
+
+async def calculate_with_overrides(  # noqa: PLR0913
+    db: AsyncSession,
+    employee: EmployeeProfile,
+    year: int,
+    month: int,
+    *,
+    schedule_overrides: list | None = None,
+    bonuses_override: Decimal | None = None,
+    fines_override: Decimal | None = None,
+) -> dict:
+    result = await db.execute(
+        select(Schedule).where(
+            Schedule.employee_id == employee.id,
+            extract("year", Schedule.date) == year,
+            extract("month", Schedule.date) == month,
+        ),
+    )
+    db_entries = list(result.scalars().all())
+
+    if schedule_overrides:
+        override_dates = {e.date for e in schedule_overrides}
+        merged = [e for e in db_entries if e.date not in override_dates]
+        merged.extend(schedule_overrides)
+    else:
+        merged = db_entries
+
+    base_salary, quantity = _compute_entries_salary(merged)
+
+    if bonuses_override is not None:
+        bonuses = bonuses_override.quantize(CENTS)
+    else:
+        bonuses = Decimal(
+            await calculate_adjustments_sum(db, employee.id, year, month, "bonus"),
+        ).quantize(CENTS)
+
+    if fines_override is not None:
+        fines = fines_override.quantize(CENTS)
+    else:
+        fines = Decimal(
+            await calculate_adjustments_sum(db, employee.id, year, month, "fine"),
+        ).quantize(CENTS)
+
     total = (base_salary + bonuses - fines).quantize(CENTS)
 
     return {
-        "currency": currency,
+        "employee_id": employee.id,
+        "full_name": employee.full_name,
+        "currency": employee.currency,
         "quantity": quantity,
         "base_salary": base_salary,
         "bonuses": bonuses,

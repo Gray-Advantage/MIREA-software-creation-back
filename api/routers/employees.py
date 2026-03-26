@@ -195,6 +195,19 @@ def _apply_search_filters(  # noqa: C901
 router = APIRouter()
 
 
+@router.post("/avatar", responses={**ADMIN})
+async def upload_standalone_avatar(
+    file: UploadFile,
+    _admin: Annotated[User, Depends(require_admin)],
+) -> dict[str, str]:
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{uuid.uuid4().hex}.{ext}"
+    await s3.upload(key, data, content_type)
+    return {"avatar_key": key}
+
+
 @router.get("", responses={**ADMIN})
 async def list_employees(  # noqa: PLR0913
     admin: Annotated[User, Depends(require_admin)],
@@ -294,6 +307,7 @@ async def create_employee(
         rate_type=body.rate_type.value,
         rate_amount=body.rate_amount,
         currency=body.currency.value,
+        avatar_key=body.avatar_key,
     )
     db.add(profile)
     await db.flush()

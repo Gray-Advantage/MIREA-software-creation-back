@@ -152,129 +152,207 @@ class TestCalculate(AuthTestView):
     URL = "/api/statistics/calculate"
     METHOD = "POST"
 
-    async def test_success__hourly(
+    async def test_error__employee_not_found(
         self,
         auth_client: AsyncClient,
     ) -> None:
         payload = {
-            "schedule": [
-                {
-                    "date": "2026-04-10",
-                    "start_time": "09:00:00",
-                    "end_time": "18:00:00",
-                    "rate_type": "hourly",
-                    "rate_amount": 500,
-                },
-                {
-                    "date": "2026-04-11",
-                    "start_time": "09:00:00",
-                    "end_time": "18:00:00",
-                    "rate_type": "hourly",
-                    "rate_amount": 500,
-                },
-            ],
-            "currency": "RUB",
-            "bonuses": 1000,
-            "fines": 200,
+            "employee_id": 99999,
+            "month": "2026-03",
+        }
+        response = await self.request(auth_client, json=payload)
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    async def test_success__no_overrides_uses_db(
+        self,
+        auth_client: AsyncClient,
+        employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_with_schedule_and_adj
+        today = _dt.datetime.now(_dt.UTC).date()
+        month = today.strftime("%Y-%m")
+
+        payload = {
+            "employee_id": profile.id,
+            "month": month,
         }
         response = await self.request(auth_client, json=payload)
 
         assert response.status_code == HTTPStatus.OK
+        # 3 * 8h * 600 = 14400, + 1000 bonus - 300 fine = 15100
         assert response.json() == {
+            "employee_id": profile.id,
+            "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 18.0,
-            "base_salary": 9000.0,
+            "quantity": 24.0,
+            "base_salary": 14400.0,
             "bonuses": 1000.0,
-            "fines": 200.0,
-            "total": 9800.0,
+            "fines": 300.0,
+            "total": 15100.0,
         }
 
-    async def test_success__shift(
+    async def test_success__override_bonuses_fines(
         self,
         auth_client: AsyncClient,
+        employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
     ) -> None:
+        _, profile = employee_with_schedule_and_adj
+        today = _dt.datetime.now(_dt.UTC).date()
+        month = today.strftime("%Y-%m")
+
         payload = {
+            "employee_id": profile.id,
+            "month": month,
+            "bonuses": 5000,
+            "fines": 0,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        # base stays 14400, overridden bonuses=5000, fines=0
+        assert response.json() == {
+            "employee_id": profile.id,
+            "full_name": "Петров Пётр",
+            "currency": "RUB",
+            "quantity": 24.0,
+            "base_salary": 14400.0,
+            "bonuses": 5000.0,
+            "fines": 0.0,
+            "total": 19400.0,
+        }
+
+    async def test_success__override_one_day(
+        self,
+        auth_client: AsyncClient,
+        employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_with_schedule_and_adj
+        today = _dt.datetime.now(_dt.UTC).date()
+        month = today.strftime("%Y-%m")
+
+        # DB has 3 days at day 5,6,7 with rate 600/h and 8h shifts
+        # Override day 5 with rate 800/h (same hours)
+        day5 = today.replace(day=5).isoformat()
+        payload = {
+            "employee_id": profile.id,
+            "month": month,
             "schedule": [
                 {
-                    "date": "2026-04-10",
+                    "date": day5,
+                    "start_time": "10:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 800,
+                },
+            ],
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        # day5: 8h * 800 = 6400, day6: 8h * 600 = 4800, day7: 8h * 600 = 4800
+        # base = 16000, bonuses from DB = 1000, fines from DB = 300
+        assert response.json() == {
+            "employee_id": profile.id,
+            "full_name": "Петров Пётр",
+            "currency": "RUB",
+            "quantity": 24.0,
+            "base_salary": 16000.0,
+            "bonuses": 1000.0,
+            "fines": 300.0,
+            "total": 16700.0,
+        }
+
+    async def test_success__add_extra_day(
+        self,
+        auth_client: AsyncClient,
+        employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_with_schedule_and_adj
+        today = _dt.datetime.now(_dt.UTC).date()
+        month = today.strftime("%Y-%m")
+
+        # DB has days 5,6,7. Add day 10 — doesn't overlap, so it merges in.
+        day10 = today.replace(day=10).isoformat()
+        payload = {
+            "employee_id": profile.id,
+            "month": month,
+            "schedule": [
+                {
+                    "date": day10,
+                    "start_time": "10:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 600,
+                },
+            ],
+            "bonuses": 0,
+            "fines": 0,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        # 4 days * 8h * 600 = 19200
+        assert response.json() == {
+            "employee_id": profile.id,
+            "full_name": "Петров Пётр",
+            "currency": "RUB",
+            "quantity": 32.0,
+            "base_salary": 19200.0,
+            "bonuses": 0.0,
+            "fines": 0.0,
+            "total": 19200.0,
+        }
+
+    async def test_success__full_override(
+        self,
+        auth_client: AsyncClient,
+        employee_with_schedule_and_adj: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_with_schedule_and_adj
+        today = _dt.datetime.now(_dt.UTC).date()
+        month = today.strftime("%Y-%m")
+
+        # Override all 3 existing days + bonuses + fines
+        payload = {
+            "employee_id": profile.id,
+            "month": month,
+            "schedule": [
+                {
+                    "date": today.replace(day=5).isoformat(),
+                    "start_time": "08:00:00",
+                    "end_time": "20:00:00",
+                    "rate_type": "shift",
+                    "rate_amount": 3000,
+                },
+                {
+                    "date": today.replace(day=6).isoformat(),
+                    "start_time": "08:00:00",
+                    "end_time": "20:00:00",
+                    "rate_type": "shift",
+                    "rate_amount": 3000,
+                },
+                {
+                    "date": today.replace(day=7).isoformat(),
                     "start_time": "08:00:00",
                     "end_time": "20:00:00",
                     "rate_type": "shift",
                     "rate_amount": 3000,
                 },
             ],
-            "currency": "RUB",
-            "bonuses": 0,
-            "fines": 0,
-        }
-        response = await self.request(auth_client, json=payload)
-
-        assert response.status_code == HTTPStatus.OK
-        assert response.json() == {
-            "currency": "RUB",
-            "quantity": 1.0,
-            "base_salary": 3000.0,
-            "bonuses": 0.0,
-            "fines": 0.0,
-            "total": 3000.0,
-        }
-
-    async def test_success__empty_schedule(
-        self,
-        auth_client: AsyncClient,
-    ) -> None:
-        payload = {
-            "schedule": [],
-            "currency": "USD",
             "bonuses": 500,
             "fines": 100,
         }
         response = await self.request(auth_client, json=payload)
 
         assert response.status_code == HTTPStatus.OK
+        # 3 shifts * 3000 = 9000
         assert response.json() == {
-            "currency": "USD",
-            "quantity": 0.0,
-            "base_salary": 0.0,
+            "employee_id": profile.id,
+            "full_name": "Петров Пётр",
+            "currency": "RUB",
+            "quantity": 3.0,
+            "base_salary": 9000.0,
             "bonuses": 500.0,
             "fines": 100.0,
-            "total": 400.0,
-        }
-
-    async def test_success__mixed_rates(
-        self,
-        auth_client: AsyncClient,
-    ) -> None:
-        payload = {
-            "schedule": [
-                {
-                    "date": "2026-04-10",
-                    "start_time": "09:00:00",
-                    "end_time": "18:00:00",
-                    "rate_type": "hourly",
-                    "rate_amount": 400,
-                },
-                {
-                    "date": "2026-04-11",
-                    "start_time": "09:00:00",
-                    "end_time": "18:00:00",
-                    "rate_type": "hourly",
-                    "rate_amount": 600,
-                },
-            ],
-            "currency": "RUB",
-            "bonuses": 0,
-            "fines": 0,
-        }
-        response = await self.request(auth_client, json=payload)
-
-        assert response.status_code == HTTPStatus.OK
-        # 9h * 400 + 9h * 600 = 3600 + 5400 = 9000
-        assert response.json() == {
-            "currency": "RUB",
-            "quantity": 18.0,
-            "base_salary": 9000.0,
-            "bonuses": 0.0,
-            "fines": 0.0,
-            "total": 9000.0,
+            "total": 9400.0,
         }

@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import ClientError
 from decouple import config
 
-S3_ENDPOINT: str = config("S3_ENDPOINT", default="http://localhost:9000")
+S3_ENDPOINT: str = config("S3_ENDPOINT", default="http://minio:9000")
 S3_ACCESS_KEY: str = config("MINIO_ROOT_USER", default="admin")
 S3_SECRET_KEY: str = config("MINIO_ROOT_PASSWORD", default="adminadmin")
 S3_BUCKET: str = config("S3_BUCKET", default="stafftracker")

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, PlainSerializer
 
-from api.schemas.employee import Currency, RateType
+from api.schemas.employee import RateType
 
 Money = Annotated[
     Decimal,
@@ -47,31 +47,20 @@ class CalcScheduleEntry(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "date": "2026-04-10",
-                    "start_time": "09:00:00",
-                    "end_time": "18:00:00",
-                    "rate_type": "hourly",
-                    "rate_amount": 500,
-                },
-            ],
-        },
-    }
-
 
 class CalcRequest(BaseModel):
-    schedule: list[CalcScheduleEntry]
-    currency: Currency = Currency.RUB
-    bonuses: Decimal = Decimal(0)
-    fines: Decimal = Decimal(0)
+    employee_id: int
+    month: str
+    schedule: list[CalcScheduleEntry] | None = None
+    bonuses: Decimal | None = None
+    fines: Decimal | None = None
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
+                    "employee_id": 1,
+                    "month": "2026-04",
                     "schedule": [
                         {
                             "date": "2026-04-10",
@@ -80,15 +69,7 @@ class CalcRequest(BaseModel):
                             "rate_type": "hourly",
                             "rate_amount": 500,
                         },
-                        {
-                            "date": "2026-04-11",
-                            "start_time": "09:00:00",
-                            "end_time": "18:00:00",
-                            "rate_type": "hourly",
-                            "rate_amount": 500,
-                        },
                     ],
-                    "currency": "RUB",
                     "bonuses": 1000,
                     "fines": 200,
                 },
@@ -98,6 +79,8 @@ class CalcRequest(BaseModel):
 
 
 class CalcResponse(BaseModel):
+    employee_id: int
+    full_name: str
     currency: str
     quantity: Money
     base_salary: Money

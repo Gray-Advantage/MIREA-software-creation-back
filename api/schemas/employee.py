@@ -27,6 +27,7 @@ class EmployeeCreate(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
     currency: Currency
+    avatar_key: str | None = None
     schedule: list[ScheduleEntry] = []
 
     model_config = {
@@ -40,6 +41,7 @@ class EmployeeCreate(BaseModel):
                     "rate_type": "hourly",
                     "rate_amount": 350,
                     "currency": "RUB",
+                    "avatar_key": "avatars/abc123.jpeg",
                     "schedule": [
                         {
                             "date": "2026-04-10",
