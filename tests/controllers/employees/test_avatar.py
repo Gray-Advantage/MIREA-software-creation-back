@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
 
 from api.models import User
+from api.services.s3 import S3_BUCKET, S3_PUBLIC_URL
 from tests.base import AuthTestView
 from tests.controllers.employees.conftest import EMPLOYEE_PAYLOAD
 
@@ -32,6 +33,7 @@ TINY_JPEG = (
 )
 
 _S3 = "api.services.s3"
+_URL_PREFIX = f"{S3_PUBLIC_URL}/{S3_BUCKET}/avatars/"
 
 
 def _avatar_file(
@@ -51,7 +53,7 @@ class TestUploadStandaloneAvatar(AuthTestView):
         assert response.status_code == HTTPStatus.UNAUTHORIZED
 
     @patch(f"{_S3}.upload", new_callable=AsyncMock)
-    async def test_success__returns_key(
+    async def test_success__returns_url(
         self,
         mock_upload: AsyncMock,
         auth_client: AsyncClient,
@@ -63,18 +65,18 @@ class TestUploadStandaloneAvatar(AuthTestView):
 
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert "avatar_key" in data
-        assert data["avatar_key"].startswith("avatars/")
-        assert data["avatar_key"].endswith(".jpeg")
+        assert "avatar_url" in data
+        assert data["avatar_url"].startswith(_URL_PREFIX)
+        assert data["avatar_url"].endswith(".jpeg")
         mock_upload.assert_awaited_once()
 
 
-class TestCreateWithAvatarKey(AuthTestView):
+class TestCreateWithAvatarUrl(AuthTestView):
     URL = "/api/employees"
     METHOD = "POST"
 
     @patch(f"{_S3}.upload", new_callable=AsyncMock)
-    async def test_success__create_with_avatar_key(
+    async def test_success__create_with_avatar_url(
         self,
         mock_upload: AsyncMock,
         auth_client: AsyncClient,
@@ -83,15 +85,14 @@ class TestCreateWithAvatarKey(AuthTestView):
             "/api/employees/avatar",
             files=_avatar_file(),
         )
-        avatar_key = upload_resp.json()["avatar_key"]
+        avatar_url = upload_resp.json()["avatar_url"]
 
-        payload = {**EMPLOYEE_PAYLOAD, "avatar_key": avatar_key}
+        payload = {**EMPLOYEE_PAYLOAD, "avatar_url": avatar_url}
         response = await self.request(auth_client, json=payload)
 
         assert response.status_code == HTTPStatus.CREATED
         data = response.json()
-        assert data["profile"]["avatar_url"] is not None
-        assert "/avatar" in data["profile"]["avatar_url"]
+        assert data["profile"]["avatar_url"] == avatar_url
 
     async def test_success__create_without_avatar(
         self,
@@ -125,7 +126,8 @@ class TestPutAvatar(AuthTestView):
 
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert data["avatar_url"] == f"/api/employees/{employee_user.id}/avatar"
+        assert "avatar_url" in data
+        assert data["avatar_url"].startswith(_URL_PREFIX)
         mock_upload.assert_awaited_once()
 
     @patch(f"{_S3}.delete", new_callable=AsyncMock)
@@ -162,66 +164,6 @@ class TestPutAvatar(AuthTestView):
             "/api/employees/99999/avatar",
             files=_avatar_file(),
         )
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-class TestGetAvatar(AuthTestView):
-    URL = "/api/employees/{employee_id}/avatar"
-    METHOD = "GET"
-
-    async def test_error__when_unauthorized(self, client: AsyncClient) -> None:
-        response = await self.request(client, path={"employee_id": 0})
-        assert response.status_code == HTTPStatus.UNAUTHORIZED
-
-    @patch(
-        f"{_S3}.download",
-        new_callable=AsyncMock,
-        return_value=(TINY_JPEG, "image/jpeg"),
-    )
-    @patch(f"{_S3}.upload", new_callable=AsyncMock)
-    async def test_success(
-        self,
-        mock_upload: AsyncMock,
-        mock_download: AsyncMock,
-        auth_client: AsyncClient,
-        employee_user: User,
-    ) -> None:
-        await auth_client.put(
-            f"/api/employees/{employee_user.id}/avatar",
-            files=_avatar_file(),
-        )
-
-        response = await self.request(
-            auth_client,
-            path={"employee_id": employee_user.id},
-        )
-
-        assert response.status_code == HTTPStatus.OK
-        assert response.headers["content-type"] == "image/jpeg"
-        assert response.content == TINY_JPEG
-
-    async def test_error__no_avatar(
-        self,
-        auth_client: AsyncClient,
-        employee_user: User,
-    ) -> None:
-        response = await self.request(
-            auth_client,
-            path={"employee_id": employee_user.id},
-        )
-
-        assert response.status_code == HTTPStatus.NOT_FOUND
-        assert response.json() == {"detail": "Avatar not found"}
-
-    async def test_error__employee_not_found(
-        self,
-        auth_client: AsyncClient,
-    ) -> None:
-        response = await self.request(
-            auth_client,
-            path={"employee_id": 99999},
-        )
-
         assert response.status_code == HTTPStatus.NOT_FOUND
 
 

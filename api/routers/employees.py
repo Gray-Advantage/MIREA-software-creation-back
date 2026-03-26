@@ -10,7 +10,6 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
-    Response,
     UploadFile,
     status,
 )
@@ -140,7 +139,7 @@ def _build_employee_response(
 
     profile_read = EmployeeProfileRead.model_validate(profile)
     if profile.avatar_key:
-        profile_read.avatar_url = f"/api/employees/{user.id}/avatar"
+        profile_read.avatar_url = s3.public_url(profile.avatar_key)
 
     return EmployeeRead(
         id=user.id,
@@ -193,19 +192,6 @@ def _apply_search_filters(  # noqa: C901
 
 
 router = APIRouter()
-
-
-@router.post("/avatar", responses={**ADMIN})
-async def upload_standalone_avatar(
-    file: UploadFile,
-    _admin: Annotated[User, Depends(require_admin)],
-) -> dict[str, str]:
-    data = await file.read()
-    content_type = file.content_type or "image/jpeg"
-    ext = content_type.split("/")[-1]
-    key = f"avatars/{uuid.uuid4().hex}.{ext}"
-    await s3.upload(key, data, content_type)
-    return {"avatar_key": key}
 
 
 @router.get("", responses={**ADMIN})
@@ -307,7 +293,7 @@ async def create_employee(
         rate_type=body.rate_type.value,
         rate_amount=body.rate_amount,
         currency=body.currency.value,
-        avatar_key=body.avatar_key,
+        avatar_key=s3.extract_key(body.avatar_url) if body.avatar_url else None,
     )
     db.add(profile)
     await db.flush()
@@ -441,7 +427,7 @@ async def get_employee(
 
 
 @router.patch("/{employee_id}", responses={**ADMIN_NOT_FOUND})
-async def update_employee(
+async def update_employee(  # noqa: C901
     employee_id: int,
     body: EmployeeUpdate,
     admin: Annotated[User, Depends(require_admin)],
@@ -454,6 +440,10 @@ async def update_employee(
         user.is_active = update_data.pop("is_active")
 
     new_schedule = update_data.pop("schedule", None)
+
+    if "avatar_url" in update_data:
+        raw = update_data.pop("avatar_url")
+        update_data["avatar_key"] = s3.extract_key(raw) if raw else None
 
     profile = user.profile
 
@@ -490,62 +480,6 @@ async def update_employee(
         profile,
         adjustments=adj_map.get(profile.id, []),
     )
-
-
-@router.put("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
-async def upload_avatar(
-    employee_id: int,
-    file: UploadFile,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> dict[str, str]:
-    user = await _get_employee_user(employee_id, admin, db)
-    profile = user.profile
-
-    data = await file.read()
-    content_type = file.content_type or "image/jpeg"
-    ext = content_type.split("/")[-1]
-    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
-
-    if profile.avatar_key:
-        await s3.delete(profile.avatar_key)
-
-    await s3.upload(key, data, content_type)
-    profile.avatar_key = key
-    await db.commit()
-
-    return {"avatar_url": f"/api/employees/{user.id}/avatar"}
-
-
-@router.get("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
-async def get_avatar(
-    employee_id: int,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> Response:
-    user = await _get_employee_user(employee_id, admin, db)
-    if not user.profile.avatar_key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Avatar not found",
-        )
-    data, content_type = await s3.download(user.profile.avatar_key)
-    return Response(content=data, media_type=content_type)
-
-
-@router.delete(
-    "/{employee_id}/avatar",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={**ADMIN_NOT_FOUND},
-)
-async def delete_avatar(
-    employee_id: int,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> None:
-    user = await _get_employee_user(employee_id, admin, db)
-    await _delete_avatar(user.profile)
-    await db.commit()
 
 
 @router.delete(
@@ -594,3 +528,56 @@ async def change_employee_password(
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"detail": "Password changed"}
+
+
+@router.post("/avatar", responses={**ADMIN})
+async def upload_standalone_avatar(
+    file: UploadFile,
+    _admin: Annotated[User, Depends(require_admin)],
+) -> dict[str, str]:
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{uuid.uuid4().hex}.{ext}"
+    await s3.upload(key, data, content_type)
+    return {"avatar_url": s3.public_url(key)}
+
+
+@router.put("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
+async def upload_avatar(
+    employee_id: int,
+    file: UploadFile,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict[str, str]:
+    user = await _get_employee_user(employee_id, admin, db)
+    profile = user.profile
+
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
+
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
+
+    await s3.upload(key, data, content_type)
+    profile.avatar_key = key
+    await db.commit()
+
+    return {"avatar_url": s3.public_url(key)}
+
+
+@router.delete(
+    "/{employee_id}/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
+)
+async def delete_avatar(
+    employee_id: int,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
+    user = await _get_employee_user(employee_id, admin, db)
+    await _delete_avatar(user.profile)
+    await db.commit()
