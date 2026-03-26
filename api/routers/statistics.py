@@ -10,11 +10,13 @@ from api.deps import require_admin
 from api.models import EmployeeProfile, User
 from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND
 from api.schemas.statistics import (
+    CalcRequest,
+    CalcResponse,
     EmployeeSalary,
     SalaryTableResponse,
     SummaryResponse,
 )
-from api.services.statistics import calculate_salary
+from api.services.statistics import calculate_from_input, calculate_salary
 
 router = APIRouter()
 
@@ -95,3 +97,17 @@ async def summary(
         total_employees=len(profiles),
         total_salary_fund=total_fund,
     )
+
+
+@router.post("/calculate", responses={**ADMIN})
+async def calculate(
+    body: CalcRequest,
+    _admin: Annotated[User, Depends(require_admin)],
+) -> CalcResponse:
+    data = calculate_from_input(
+        schedule=body.schedule,
+        bonuses=body.bonuses,
+        fines=body.fines,
+        currency=body.currency.value,
+    )
+    return CalcResponse(**data)

@@ -146,3 +146,135 @@ class TestSummary(AuthTestView):
             "total_employees": 1,
             "total_salary_fund": 15100.0,
         }
+
+
+class TestCalculate(AuthTestView):
+    URL = "/api/statistics/calculate"
+    METHOD = "POST"
+
+    async def test_success__hourly(
+        self,
+        auth_client: AsyncClient,
+    ) -> None:
+        payload = {
+            "schedule": [
+                {
+                    "date": "2026-04-10",
+                    "start_time": "09:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 500,
+                },
+                {
+                    "date": "2026-04-11",
+                    "start_time": "09:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 500,
+                },
+            ],
+            "currency": "RUB",
+            "bonuses": 1000,
+            "fines": 200,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {
+            "currency": "RUB",
+            "quantity": 18.0,
+            "base_salary": 9000.0,
+            "bonuses": 1000.0,
+            "fines": 200.0,
+            "total": 9800.0,
+        }
+
+    async def test_success__shift(
+        self,
+        auth_client: AsyncClient,
+    ) -> None:
+        payload = {
+            "schedule": [
+                {
+                    "date": "2026-04-10",
+                    "start_time": "08:00:00",
+                    "end_time": "20:00:00",
+                    "rate_type": "shift",
+                    "rate_amount": 3000,
+                },
+            ],
+            "currency": "RUB",
+            "bonuses": 0,
+            "fines": 0,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {
+            "currency": "RUB",
+            "quantity": 1.0,
+            "base_salary": 3000.0,
+            "bonuses": 0.0,
+            "fines": 0.0,
+            "total": 3000.0,
+        }
+
+    async def test_success__empty_schedule(
+        self,
+        auth_client: AsyncClient,
+    ) -> None:
+        payload = {
+            "schedule": [],
+            "currency": "USD",
+            "bonuses": 500,
+            "fines": 100,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {
+            "currency": "USD",
+            "quantity": 0.0,
+            "base_salary": 0.0,
+            "bonuses": 500.0,
+            "fines": 100.0,
+            "total": 400.0,
+        }
+
+    async def test_success__mixed_rates(
+        self,
+        auth_client: AsyncClient,
+    ) -> None:
+        payload = {
+            "schedule": [
+                {
+                    "date": "2026-04-10",
+                    "start_time": "09:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 400,
+                },
+                {
+                    "date": "2026-04-11",
+                    "start_time": "09:00:00",
+                    "end_time": "18:00:00",
+                    "rate_type": "hourly",
+                    "rate_amount": 600,
+                },
+            ],
+            "currency": "RUB",
+            "bonuses": 0,
+            "fines": 0,
+        }
+        response = await self.request(auth_client, json=payload)
+
+        assert response.status_code == HTTPStatus.OK
+        # 9h * 400 + 9h * 600 = 3600 + 5400 = 9000
+        assert response.json() == {
+            "currency": "RUB",
+            "quantity": 18.0,
+            "base_salary": 9000.0,
+            "bonuses": 0.0,
+            "fines": 0.0,
+            "total": 9000.0,
+        }
