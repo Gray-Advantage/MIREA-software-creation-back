@@ -14,6 +14,7 @@ from api.schemas.auth import LoginRequest, MeResponse, RegisterRequest
 from api.schemas.company import CompanyRead
 from api.schemas.employee import EmployeeProfileRead
 from api.schemas.responses import R_401, R_403, R_409
+from api.services import s3
 from api.services.auth import hash_password, verify_password
 
 router = APIRouter()
@@ -153,6 +154,8 @@ async def me(
     if full_user.profile:
         set_committed_value(full_user.profile, "schedule", [])
         profile_data = EmployeeProfileRead.model_validate(full_user.profile)
+        if full_user.profile.avatar_key:
+            profile_data.avatar_url = s3.public_url(full_user.profile.avatar_key)
 
     return MeResponse(
         id=full_user.id,
