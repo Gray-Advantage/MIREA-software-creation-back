@@ -82,8 +82,5 @@ class CalcResponse(BaseModel):
     employee_id: int
     full_name: str
     currency: str
-    quantity: Money
-    base_salary: Money
-    bonuses: Money
-    fines: Money
-    total: Money
+    monthly_salary: Money
+    final_salary: Money

@@ -196,11 +196,8 @@ class TestCalculate(AuthTestView):
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 24.0,
-            "base_salary": 14400.0,
-            "bonuses": 1000.0,
-            "fines": 300.0,
-            "total": 15100.0,
+            "monthly_salary": 14400.0,
+            "final_salary": 15100.0,
         }
 
     async def test_success__override_bonuses_fines(
@@ -224,11 +221,8 @@ class TestCalculate(AuthTestView):
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 24.0,
-            "base_salary": 14400.0,
-            "bonuses": 5000.0,
-            "fines": 0.0,
-            "total": 19400.0,
+            "monthly_salary": 14400.0,
+            "final_salary": 19400.0,
         }
 
     async def test_success__override_one_day(
@@ -264,11 +258,8 @@ class TestCalculate(AuthTestView):
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 24.0,
-            "base_salary": 16000.0,
-            "bonuses": 1000.0,
-            "fines": 300.0,
-            "total": 16700.0,
+            "monthly_salary": 16000.0,
+            "final_salary": 16700.0,
         }
 
     async def test_success__add_extra_day(
@@ -306,11 +297,8 @@ class TestCalculate(AuthTestView):
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 32.0,
-            "base_salary": 19200.0,
-            "bonuses": 0.0,
-            "fines": 0.0,
-            "total": 19200.0,
+            "monthly_salary": 19200.0,
+            "final_salary": 19200.0,
         }
 
     async def test_success__full_override(
@@ -361,11 +349,8 @@ class TestCalculate(AuthTestView):
             "employee_id": profile.id,
             "full_name": "Петров Пётр",
             "currency": "RUB",
-            "quantity": 3.0,
-            "base_salary": 9000.0,
-            "bonuses": 500.0,
-            "fines": 100.0,
-            "total": 9400.0,
+            "monthly_salary": 9000.0,
+            "final_salary": 9400.0,
         }
 
     async def test_success__exclude_future_dates(
@@ -388,12 +373,10 @@ class TestCalculate(AuthTestView):
 
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert data["quantity"] == ANY
-        assert data["base_salary"] == ANY
-        assert data["total"] == ANY
         kept_days = 1
         expected_base = kept_days * 8 * 500
-        assert data["base_salary"] == float(expected_base)
+        assert data["monthly_salary"] == float(expected_base)
+        assert data["final_salary"] == ANY
 
     async def test_success__exclude_past_date_ignored(
         self,
@@ -417,4 +400,4 @@ class TestCalculate(AuthTestView):
         data = response.json()
         kept_days = 1
         expected_base = kept_days * 8 * 500
-        assert data["base_salary"] == float(expected_base)
+        assert data["monthly_salary"] == float(expected_base)

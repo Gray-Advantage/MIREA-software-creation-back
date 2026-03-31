@@ -1,21 +1,22 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from sqlalchemy.orm.attributes import set_committed_value
 
 from api.database import get_async_session
 from api.deps import get_current_user
-from api.models import ApiSession, Company, User
+from api.models import ApiSession, Company, EmployeeProfile, User
 from api.schemas.auth import LoginRequest, MeResponse, RegisterRequest
 from api.schemas.company import CompanyRead
 from api.schemas.employee import EmployeeProfileRead
 from api.schemas.responses import R_401, R_403, R_409
 from api.services import s3
 from api.services.auth import hash_password, verify_password
+from api.services.statistics import calculate_salary, entry_hours
 
 router = APIRouter()
 
@@ -145,17 +146,39 @@ async def me(
 ) -> MeResponse:
     result = await db.execute(
         select(User)
-        .options(joinedload(User.company), joinedload(User.profile))
+        .options(
+            joinedload(User.company),
+            joinedload(User.profile).selectinload(EmployeeProfile.schedule),
+        )
         .where(User.id == user.id),
     )
     full_user = result.unique().scalar_one()
 
     profile_data = None
+    final_salary = None
+    shifts_count = None
+    total_hours = None
     if full_user.profile:
-        set_committed_value(full_user.profile, "schedule", [])
         profile_data = EmployeeProfileRead.model_validate(full_user.profile)
         if full_user.profile.avatar_key:
             profile_data.avatar_url = s3.public_url(full_user.profile.avatar_key)
+
+        now = datetime.now(UTC)
+        salary_data = await calculate_salary(
+            db, full_user.profile, now.year, now.month,
+        )
+        raw = Decimal(str(salary_data["total"]))
+        final_salary = str(raw.quantize(Decimal("0.01")))
+
+        schedule = full_user.profile.schedule or []
+        current_month = [
+            e for e in schedule
+            if e.date.year == now.year and e.date.month == now.month
+        ]
+        shifts_count = len(current_month)
+        total_hours = float(sum(
+            entry_hours(e.start_time, e.end_time) for e in current_month
+        ))
 
     return MeResponse(
         id=full_user.id,
@@ -163,4 +186,7 @@ async def me(
         role=full_user.role,
         company=CompanyRead.model_validate(full_user.company),
         profile=profile_data,
+        final_salary=final_salary,
+        shifts_count=shifts_count,
+        total_hours=total_hours,
     )

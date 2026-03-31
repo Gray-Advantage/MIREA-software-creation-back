@@ -201,12 +201,13 @@ class TestFinalSalaryGet(AuthTestView):
     ) -> None:
         profile = await _get_profile(session, employee_user.id)
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for day_offset in range(2):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=day_offset),
+                    date=base + _dt.timedelta(days=day_offset),
                     start_time=_dt.time(10, 0),
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
@@ -220,7 +221,7 @@ class TestFinalSalaryGet(AuthTestView):
                 type="bonus",
                 amount=Decimal("2000.00"),
                 comment="Премия",
-                date=today,
+                date=base,
             ),
         )
         session.add(
@@ -229,7 +230,7 @@ class TestFinalSalaryGet(AuthTestView):
                 type="fine",
                 amount=Decimal("300.00"),
                 comment="Штраф",
-                date=today,
+                date=base,
             ),
         )
         await session.flush()

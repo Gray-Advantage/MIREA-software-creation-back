@@ -9,7 +9,7 @@ from api.models import Adjustment, EmployeeProfile, Schedule
 CENTS = Decimal("0.01")
 
 
-def _entry_hours(start_time: _dt.time, end_time: _dt.time) -> Decimal:
+def entry_hours(start_time: _dt.time, end_time: _dt.time) -> Decimal:
     start = _dt.datetime.combine(_dt.date.min, start_time)
     end = _dt.datetime.combine(_dt.date.min, end_time)
     diff = end - start
@@ -37,7 +37,7 @@ async def _compute_schedule_salary(
     quantity = Decimal(0)
     for entry in entries:
         if entry.rate_type == "hourly":
-            hours = _entry_hours(entry.start_time, entry.end_time)
+            hours = entry_hours(entry.start_time, entry.end_time)
             total += hours * entry.rate_amount
             quantity += hours
         else:
@@ -115,7 +115,7 @@ def _compute_entries_salary(entries: list) -> tuple[Decimal, Decimal]:
     quantity = Decimal(0)
     for entry in entries:
         if entry.rate_type == "hourly":
-            hours = _entry_hours(entry.start_time, entry.end_time)
+            hours = entry_hours(entry.start_time, entry.end_time)
             total += hours * entry.rate_amount
             quantity += hours
         else:
@@ -156,7 +156,7 @@ async def calculate_with_overrides(  # noqa: PLR0913
     else:
         merged = db_entries
 
-    base_salary, quantity = _compute_entries_salary(merged)
+    base_salary, _quantity = _compute_entries_salary(merged)
 
     if bonuses_override is not None:
         bonuses = bonuses_override.quantize(CENTS)
@@ -172,15 +172,12 @@ async def calculate_with_overrides(  # noqa: PLR0913
             await calculate_adjustments_sum(db, employee.id, year, month, "fine"),
         ).quantize(CENTS)
 
-    total = (base_salary + bonuses - fines).quantize(CENTS)
+    final_salary = (base_salary + bonuses - fines).quantize(CENTS)
 
     return {
         "employee_id": employee.id,
         "full_name": employee.full_name,
         "currency": employee.currency,
-        "quantity": quantity,
-        "base_salary": base_salary,
-        "bonuses": bonuses,
-        "fines": fines,
-        "total": total,
+        "monthly_salary": base_salary,
+        "final_salary": final_salary,
     }

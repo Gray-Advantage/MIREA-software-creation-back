@@ -37,4 +37,7 @@ class TestMe(AuthTestView):
                 "created_at": ANY,
             },
             "profile": None,
+            "final_salary": None,
+            "shifts_count": None,
+            "total_hours": None,
         }

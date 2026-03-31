@@ -142,9 +142,8 @@ class TestMyCalculate(TestView):
         data = response.json()
         assert data["employee_id"] == profile.id
         assert data["full_name"] == "Петров Пётр"
-        assert data["base_salary"] == ANY
-        assert data["bonuses"] == ANY
-        assert data["fines"] == ANY
+        assert data["monthly_salary"] == ANY
+        assert data["final_salary"] == ANY
 
     async def test_success__with_overrides(
         self,
@@ -152,17 +151,15 @@ class TestMyCalculate(TestView):
     ) -> None:
         today = _dt.datetime.now(_dt.UTC).date()
         month = today.strftime("%Y-%m")
-        override_bonus = 9999
 
         response = await employee_client.post(
             self.URL,
-            json={"month": month, "bonuses": override_bonus, "fines": 0},
+            json={"month": month, "bonuses": 0, "fines": 0},
         )
 
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert data["bonuses"] == float(override_bonus)
-        assert data["fines"] == 0.0
+        assert data["monthly_salary"] == data["final_salary"]
 
 
 class TestMyAdjustments(TestView):
