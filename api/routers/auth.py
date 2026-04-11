@@ -1,3 +1,4 @@
+import contextlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
@@ -136,10 +137,8 @@ async def logout(
 ) -> dict:
     raw = request.cookies.get("session_id")
     if raw:
-        try:
+        with contextlib.suppress(ValueError):
             await delete_session_for_user(redis, UUID(raw), user.id)
-        except ValueError:
-            pass
     response.delete_cookie("session_id")
     return {"detail": "Logged out"}
 
@@ -170,20 +169,22 @@ async def me(
 
         now = datetime.now(UTC)
         salary_data = await calculate_salary(
-            db, full_user.profile, now.year, now.month,
+            db,
+            full_user.profile,
+            now.year,
+            now.month,
         )
         raw = Decimal(str(salary_data["total"]))
         final_salary = str(raw.quantize(Decimal("0.01")))
 
         schedule = full_user.profile.schedule or []
         current_month = [
-            e for e in schedule
-            if e.date.year == now.year and e.date.month == now.month
+            e for e in schedule if e.date.year == now.year and e.date.month == now.month
         ]
         shifts_count = len(current_month)
-        total_hours = float(sum(
-            entry_hours(e.start_time, e.end_time) for e in current_month
-        ))
+        total_hours = float(
+            sum(entry_hours(e.start_time, e.end_time) for e in current_month)
+        )
 
     return MeResponse(
         id=full_user.id,

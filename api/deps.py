@@ -48,9 +48,7 @@ async def get_current_user(
         )
 
     result = await db.execute(
-        select(User)
-        .options(joinedload(User.company))
-        .where(User.id == user_id),
+        select(User).options(joinedload(User.company)).where(User.id == user_id),
     )
     user = result.scalar_one_or_none()
 

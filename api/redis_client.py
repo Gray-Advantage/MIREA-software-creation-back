@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 from decouple import config
 from redis.asyncio import Redis, from_url
 
-_redis: Redis | None = None
+_redis_slot: list[Redis | None] = [None]
 
 
 def redis_url() -> str:
@@ -11,22 +11,20 @@ def redis_url() -> str:
 
 
 async def init_redis() -> None:
-    global _redis
     if config("ENVIRONMENT", default="") == "pytest":
         return
-    if _redis is None:
-        _redis = from_url(redis_url(), decode_responses=True)
+    if _redis_slot[0] is None:
+        _redis_slot[0] = from_url(redis_url(), decode_responses=True)
 
 
 async def shutdown_redis() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
+    if _redis_slot[0] is not None:
+        await _redis_slot[0].aclose()
+        _redis_slot[0] = None
 
 
 async def get_redis() -> AsyncGenerator[Redis, None]:
-    if _redis is None:
+    if _redis_slot[0] is None:
         msg = "Redis client is not initialized"
         raise RuntimeError(msg)
-    yield _redis
+    yield _redis_slot[0]
