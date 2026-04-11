@@ -1,4 +1,3 @@
-from collections.abc import AsyncGenerator
 from typing import Annotated
 from uuid import UUID
 
@@ -12,12 +11,6 @@ from api.database import get_async_session
 from api.models import User
 from api.redis_client import get_redis
 from api.services import session_store
-
-
-async def get_db(
-    session: Annotated[AsyncSession, Depends(get_async_session)],
-) -> AsyncGenerator[AsyncSession, None]:
-    yield session
 
 
 async def get_current_user(

@@ -30,3 +30,14 @@ max-args = 5
 
 [tool.ruff.lint.mccabe]
 max-complexity = 5
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+exclude = ["api/alembic/"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "api.redis_client"
+disable_error_code = ["attr-defined"]

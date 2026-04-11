@@ -2,7 +2,7 @@ import datetime as _dt
 import secrets
 import uuid
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from dateutil.relativedelta import relativedelta
 from fastapi import (
@@ -18,6 +18,7 @@ from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.sql.selectable import Select
 
 from api.database import get_async_session
 from api.deps import require_admin
@@ -156,13 +157,13 @@ def _build_employee_response(
 
 
 def _apply_search_filters(  # noqa: C901
-    query: select,
+    query: Select[Any],
     *,
     q: str | None,
     full_name: str | None,
     contact: str | None,
     position: str | None,
-) -> select:
+) -> Select[Any]:
     has_specific = any(f and f.strip() for f in [full_name, contact, position])
     has_q = bool(q and q.strip())
 
@@ -173,7 +174,7 @@ def _apply_search_filters(  # noqa: C901
         )
 
     if has_q:
-        term = f"%{q.strip()}%"
+        term = f"%{(q or '').strip()}%"
         query = query.where(
             or_(
                 User.email.ilike(term),
@@ -383,7 +384,7 @@ async def _get_employee_user(
     admin: User,
     db: AsyncSession,
     month: str | None = None,
-) -> User:
+) -> tuple[User, EmployeeProfile]:
     result = await db.execute(
         select(User)
         .options(joinedload(User.profile))
@@ -394,13 +395,19 @@ async def _get_employee_user(
         ),
     )
     user = result.unique().scalar_one_or_none()
-    if user is None or user.profile is None:
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Employee not found",
         )
-    await _load_schedule_filtered(db, [user.profile], month)
-    return user
+    profile = user.profile
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found",
+        )
+    await _load_schedule_filtered(db, [profile], month)
+    return user, profile
 
 
 @router.get("/{employee_id}", responses={**ADMIN_NOT_FOUND})
@@ -416,17 +423,17 @@ async def get_employee(
         ),
     ] = None,
 ) -> EmployeeRead:
-    user = await _get_employee_user(employee_id, admin, db, month)
+    user, profile = await _get_employee_user(employee_id, admin, db, month)
     adj_map = await _load_adjustments_for_month(
         db,
-        [user.profile.id],
+        [profile.id],
         month,
     )
     return _build_employee_response(
         user,
-        user.profile,
+        profile,
         month,
-        adj_map.get(user.profile.id, []),
+        adj_map.get(profile.id, []),
     )
 
 
@@ -437,7 +444,7 @@ async def update_employee(  # noqa: C901
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> EmployeeRead:
-    user = await _get_employee_user(employee_id, admin, db)
+    user, profile = await _get_employee_user(employee_id, admin, db)
     update_data = body.model_dump(exclude_unset=True)
 
     if "is_active" in update_data:
@@ -448,8 +455,6 @@ async def update_employee(  # noqa: C901
     if "avatar_url" in update_data:
         raw = update_data.pop("avatar_url")
         update_data["avatar_key"] = s3.extract_key(raw) if raw else None
-
-    profile = user.profile
 
     for field, value in update_data.items():
         if hasattr(profile, field):
@@ -497,8 +502,7 @@ async def delete_employee(
     db: Annotated[AsyncSession, Depends(get_async_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> None:
-    user = await _get_employee_user(employee_id, admin, db)
-    profile = user.profile
+    user, profile = await _get_employee_user(employee_id, admin, db)
 
     if profile.avatar_key:
         await s3.delete(profile.avatar_key)
@@ -528,7 +532,7 @@ async def change_employee_password(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    user = await _get_employee_user(employee_id, admin, db)
+    user, _profile = await _get_employee_user(employee_id, admin, db)
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"detail": "Password changed"}
@@ -541,12 +545,12 @@ async def calculate(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> CalcResponse:
-    user = await _get_employee_user(employee_id, admin, db)
+    _user, profile = await _get_employee_user(employee_id, admin, db)
     year, m = map(int, body.month.split("-"))
 
     data = await calculate_with_overrides(
         db,
-        user.profile,
+        profile,
         year,
         m,
         schedule_overrides=body.schedule,
@@ -577,8 +581,7 @@ async def upload_avatar(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    user = await _get_employee_user(employee_id, admin, db)
-    profile = user.profile
+    _user, profile = await _get_employee_user(employee_id, admin, db)
 
     data = await file.read()
     content_type = file.content_type or "image/jpeg"
@@ -605,6 +608,6 @@ async def delete_avatar(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> None:
-    user = await _get_employee_user(employee_id, admin, db)
-    await _delete_avatar(user.profile)
+    _user, profile = await _get_employee_user(employee_id, admin, db)
+    await _delete_avatar(profile)
     await db.commit()
