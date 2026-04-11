@@ -1,26 +1,32 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from api.database import get_async_session
 from api.deps import get_current_user
-from api.models import ApiSession, Company, EmployeeProfile, User
+from api.models import Company, EmployeeProfile, User
+from api.redis_client import get_redis
 from api.schemas.auth import LoginRequest, MeResponse, RegisterRequest
 from api.schemas.company import CompanyRead
 from api.schemas.employee import EmployeeProfileRead
 from api.schemas.responses import R_401, R_403, R_409
 from api.services import s3
 from api.services.auth import hash_password, verify_password
+from api.services.session_store import (
+    SESSION_TTL_SECONDS,
+    create_session,
+    delete_session_for_user,
+)
 from api.services.statistics import calculate_salary, entry_hours
 
 router = APIRouter()
-
-SESSION_TTL_DAYS = 30
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, responses={**R_409})
@@ -28,6 +34,7 @@ async def register(
     body: RegisterRequest,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
     existing = await db.execute(
         select(Company).where(Company.email == body.company.email),
@@ -69,19 +76,15 @@ async def register(
     db.add(user)
     await db.flush()
 
-    session = ApiSession(
-        user_id=user.id,
-        expires_at=datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS),
-    )
-    db.add(session)
+    sid = await create_session(redis, user.id)
     await db.commit()
 
     response.set_cookie(
         key="session_id",
-        value=str(session.id),
+        value=str(sid),
         path="/",
         httponly=True,
-        max_age=SESSION_TTL_DAYS * 86400,
+        max_age=SESSION_TTL_SECONDS,
         samesite="lax",
     )
 
@@ -93,6 +96,7 @@ async def login(
     body: LoginRequest,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
@@ -109,19 +113,14 @@ async def login(
             detail="Account is deactivated",
         )
 
-    session = ApiSession(
-        user_id=user.id,
-        expires_at=datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS),
-    )
-    db.add(session)
-    await db.commit()
+    sid = await create_session(redis, user.id)
 
     response.set_cookie(
         key="session_id",
-        value=str(session.id),
+        value=str(sid),
         path="/",
         httponly=True,
-        max_age=SESSION_TTL_DAYS * 86400,
+        max_age=SESSION_TTL_SECONDS,
         samesite="lax",
     )
 
@@ -130,11 +129,17 @@ async def login(
 
 @router.post("/logout", responses={**R_401})
 async def logout(
+    request: Request,
     response: Response,
     user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> dict:
-    await db.execute(select(ApiSession).where(ApiSession.user_id == user.id))
+    raw = request.cookies.get("session_id")
+    if raw:
+        try:
+            await delete_session_for_user(redis, UUID(raw), user.id)
+        except ValueError:
+            pass
     response.delete_cookie("session_id")
     return {"detail": "Logged out"}
 

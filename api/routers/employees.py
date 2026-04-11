@@ -13,6 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from redis.asyncio import Redis
 from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -22,12 +23,12 @@ from api.database import get_async_session
 from api.deps import require_admin
 from api.models import (
     Adjustment,
-    ApiSession,
     EmployeeProfile,
     Schedule,
     TimeEntry,
     User,
 )
+from api.redis_client import get_redis
 from api.schemas.employee import (
     EmployeeCreate,
     EmployeeRead,
@@ -38,6 +39,7 @@ from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND, R_409
 from api.schemas.statistics import CalcRequest, CalcResponse
 from api.services import s3
 from api.services.auth import hash_password
+from api.services.session_store import delete_all_sessions_for_user
 from api.services.statistics import calculate_with_overrides
 
 
@@ -493,12 +495,15 @@ async def delete_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> None:
     user = await _get_employee_user(employee_id, admin, db)
     profile = user.profile
 
     if profile.avatar_key:
         await s3.delete(profile.avatar_key)
+
+    await delete_all_sessions_for_user(redis, user.id)
 
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile.id),
@@ -511,9 +516,6 @@ async def delete_employee(
     )
     await db.execute(
         delete(EmployeeProfile).where(EmployeeProfile.id == profile.id),
-    )
-    await db.execute(
-        delete(ApiSession).where(ApiSession.user_id == user.id),
     )
     await db.execute(delete(User).where(User.id == user.id))
     await db.commit()

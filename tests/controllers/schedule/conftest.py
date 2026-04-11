@@ -4,13 +4,15 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from fakeredis import FakeAsyncRedis
 from fastapi import FastAPI
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_async_session
-from api.models import ApiSession, Company, EmployeeProfile, Schedule, User
+from api.models import Company, EmployeeProfile, Schedule, User
 from api.services.auth import hash_password
+from api.services.session_store import create_session
 from tests.constants import (
     DEFAULT_COMPANY_EMAIL,
     DEFAULT_COMPANY_NAME,
@@ -18,7 +20,6 @@ from tests.constants import (
     DEFAULT_USER_EMAIL,
 )
 
-SESSION_TTL_DAYS = 30
 SCHEDULE_ENTRY_COUNT = 3
 
 
@@ -66,20 +67,15 @@ async def registered_admin(session: AsyncSession, company: Company) -> User:
 @pytest.fixture
 async def auth_client(
     transport: ASGITransport,
-    session: AsyncSession,
     registered_admin: User,
+    fake_redis_client: FakeAsyncRedis,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    api_session = ApiSession(
-        user_id=registered_admin.id,
-        expires_at=_dt.datetime.now(_dt.UTC) + _dt.timedelta(days=SESSION_TTL_DAYS),
-    )
-    session.add(api_session)
-    await session.flush()
+    sid = await create_session(fake_redis_client, registered_admin.id)
 
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        cookies={"session_id": str(api_session.id)},
+        cookies={"session_id": str(sid)},
     ) as c:
         yield c
 

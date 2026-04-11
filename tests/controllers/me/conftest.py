@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from fakeredis import FakeAsyncRedis
 from fastapi import FastAPI
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,13 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_async_session
 from api.models import (
     Adjustment,
-    ApiSession,
     Company,
     EmployeeProfile,
     Schedule,
     User,
 )
 from api.services.auth import hash_password
+from api.services.session_store import create_session
 from tests.constants import (
     DEFAULT_COMPANY_EMAIL,
     DEFAULT_COMPANY_NAME,
@@ -25,7 +26,6 @@ from tests.constants import (
     DEFAULT_USER_EMAIL,
 )
 
-SESSION_TTL_DAYS = 30
 EMPLOYEE_EMAIL = "worker@test.com"
 
 
@@ -123,21 +123,16 @@ async def employee_user(
 @pytest.fixture
 async def employee_client(
     transport: ASGITransport,
-    session: AsyncSession,
     employee_user: tuple[User, EmployeeProfile],
+    fake_redis_client: FakeAsyncRedis,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     user, _ = employee_user
-    api_session = ApiSession(
-        user_id=user.id,
-        expires_at=_dt.datetime.now(_dt.UTC) + _dt.timedelta(days=SESSION_TTL_DAYS),
-    )
-    session.add(api_session)
-    await session.flush()
+    sid = await create_session(fake_redis_client, user.id)
 
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        cookies={"session_id": str(api_session.id)},
+        cookies={"session_id": str(sid)},
     ) as c:
         yield c
 
@@ -147,6 +142,7 @@ async def admin_client(
     transport: ASGITransport,
     session: AsyncSession,
     company: Company,
+    fake_redis_client: FakeAsyncRedis,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     admin = User(
         email=DEFAULT_USER_EMAIL,
@@ -157,16 +153,11 @@ async def admin_client(
     session.add(admin)
     await session.flush()
 
-    api_session = ApiSession(
-        user_id=admin.id,
-        expires_at=_dt.datetime.now(_dt.UTC) + _dt.timedelta(days=SESSION_TTL_DAYS),
-    )
-    session.add(api_session)
-    await session.flush()
+    sid = await create_session(fake_redis_client, admin.id)
 
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        cookies={"session_id": str(api_session.id)},
+        cookies={"session_id": str(sid)},
     ) as c:
         yield c

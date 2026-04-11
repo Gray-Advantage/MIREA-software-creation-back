@@ -75,7 +75,6 @@ class User(Base):
     profile: Mapped[EmployeeProfile | None] = relationship(
         back_populates="user",
     )
-    sessions: Mapped[list[ApiSession]] = relationship(back_populates="user")
 
 
 class EmployeeProfile(Base):
@@ -215,21 +214,3 @@ class TimeEntry(Base):
     employee: Mapped[EmployeeProfile] = relationship(
         back_populates="time_entries",
     )
-
-
-class ApiSession(Base):
-    __tablename__ = "api_session"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid,
-        primary_key=True,
-        default=uuid.uuid4,
-    )
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-    user: Mapped[User] = relationship(back_populates="sessions")

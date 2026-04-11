@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.database import engine
+from api.redis_client import init_redis, shutdown_redis
 from api.routers import (
     adjustments,
     auth,
@@ -24,7 +25,9 @@ from api.services.s3 import ensure_bucket
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     ensure_bucket()
+    await init_redis()
     yield
+    await shutdown_redis()
     await engine.dispose()
 
 
