@@ -2,8 +2,10 @@ from http import HTTPStatus
 from unittest.mock import ANY
 
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models import User
+from api.models import EmployeeProfile, User
 from tests.base import AuthTestView
 
 
@@ -158,6 +160,28 @@ class TestUpdateEmployee(AuthTestView):
             "monthly_salary": "0.00",
             "final_salary": "0.00",
         }
+
+    async def test_success__clear_avatar_url(
+        self,
+        auth_client: AsyncClient,
+        employee_user: User,
+        session: AsyncSession,
+    ) -> None:
+        result = await session.execute(
+            select(EmployeeProfile).where(EmployeeProfile.user_id == employee_user.id),
+        )
+        profile = result.scalar_one()
+        profile.avatar_key = "avatars/clear_me.png"
+        await session.flush()
+
+        response = await self.request(
+            auth_client,
+            path={"employee_id": employee_user.id},
+            json={"avatar_url": None},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["profile"]["avatar_url"] is None
 
     async def test_error__not_found(
         self,

@@ -1,10 +1,17 @@
 import datetime as _dt
+import uuid
 from http import HTTPStatus
 from unittest.mock import ANY
 
-from httpx import AsyncClient
+import httpx
+from fakeredis import FakeAsyncRedis
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models import EmployeeProfile, User
+from api.models import Company, EmployeeProfile, User
+from api.services.auth import hash_password
+from api.services.session_store import create_session
 from tests.base import TestView
 
 
@@ -34,6 +41,21 @@ class TestMyProfile(TestView):
         assert data["full_name"] == "Петров Пётр"
         assert data["position"] == "Бариста"
         assert data["currency"] == "RUB"
+
+    async def test_success__with_avatar_url(
+        self,
+        employee_client: AsyncClient,
+        session: AsyncSession,
+        employee_user: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_user
+        profile.avatar_key = "avatars/me.png"
+        await session.flush()
+
+        response = await self.request(employee_client)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["avatar_url"] is not None
 
 
 class TestMySchedule(TestView):
@@ -220,3 +242,69 @@ class TestMyTimeEntries(TestView):
         response = await self.request(employee_client)
         assert response.status_code == HTTPStatus.OK
         assert response.json() == []
+
+    async def test_success__by_month(
+        self,
+        employee_client: AsyncClient,
+    ) -> None:
+        response = await self.request(
+            employee_client,
+            params={"month": "2020-01"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == []
+
+
+class TestAuthMeEmployee(TestView):
+    URL = "/api/auth/me"
+    METHOD = "GET"
+
+    async def test_success__includes_avatar_and_salary(
+        self,
+        employee_client: AsyncClient,
+        session: AsyncSession,
+        employee_user: tuple[User, EmployeeProfile],
+    ) -> None:
+        _, profile = employee_user
+        profile.avatar_key = "avatars/test.png"
+        await session.flush()
+
+        response = await self.request(employee_client)
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert data["profile"] is not None
+        assert data["profile"]["avatar_url"] is not None
+        assert data["final_salary"] is not None
+        assert data["shifts_count"] is not None
+        assert data["total_hours"] is not None
+
+
+class TestMyProfileNotFound(TestView):
+    URL = "/api/me/profile"
+    METHOD = "GET"
+
+    async def test_error__employee_without_profile(
+        self,
+        session: AsyncSession,
+        company: Company,
+        transport: ASGITransport,
+        app: FastAPI,
+        fake_redis_client: FakeAsyncRedis,
+    ) -> None:
+        user = User(
+            email=f"noprof_{uuid.uuid4().hex}@test.com",
+            password_hash=hash_password("secret"),
+            role="employee",
+            company_id=company.id,
+        )
+        session.add(user)
+        await session.flush()
+        sid = await create_session(fake_redis_client, user.id)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+            cookies={"session_id": str(sid)},
+        ) as client:
+            response = await client.get(self.URL)
+        assert response.status_code == HTTPStatus.NOT_FOUND

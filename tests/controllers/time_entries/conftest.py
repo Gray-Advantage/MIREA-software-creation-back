@@ -121,22 +121,6 @@ async def employee_user(
 
 
 @pytest.fixture
-async def employee_user_without_profile(
-    session: AsyncSession,
-    company: Company,
-) -> User:
-    user = User(
-        email="orphan_employee@test.com",
-        password_hash=hash_password(EMPLOYEE_PASSWORD),
-        role="employee",
-        company_id=company.id,
-    )
-    session.add(user)
-    await session.flush()
-    return user
-
-
-@pytest.fixture
 async def other_company_employee(session: AsyncSession) -> User:
     other_company = Company(
         name="Other Company",
