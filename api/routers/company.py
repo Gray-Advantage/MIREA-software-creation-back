@@ -7,18 +7,19 @@ from api.database import get_async_session
 from api.deps import require_admin
 from api.models import User
 from api.schemas.company import CompanyRead, CompanyUpdate
+from api.schemas.responses import ADMIN
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", responses={**ADMIN})
 async def get_company(
     user: Annotated[User, Depends(require_admin)],
 ) -> CompanyRead:
     return CompanyRead.model_validate(user.company)
 
 
-@router.patch("")
+@router.patch("", responses={**ADMIN})
 async def update_company(
     body: CompanyUpdate,
     user: Annotated[User, Depends(require_admin)],

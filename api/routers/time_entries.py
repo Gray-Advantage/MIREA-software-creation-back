@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_async_session
 from api.deps import require_admin
 from api.models import EmployeeProfile, TimeEntry, User
+from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND
 from api.schemas.time_entry import TimeEntryRead, TimeEntryUpdate
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", responses={**ADMIN})
 async def list_time_entries(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
@@ -40,7 +41,7 @@ async def list_time_entries(
     return [TimeEntryRead.model_validate(e) for e in result.scalars().all()]
 
 
-@router.get("/{entry_id}")
+@router.get("/{entry_id}", responses={**ADMIN_NOT_FOUND})
 async def get_time_entry(
     entry_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -61,7 +62,7 @@ async def get_time_entry(
     return TimeEntryRead.model_validate(entry)
 
 
-@router.patch("/{entry_id}")
+@router.patch("/{entry_id}", responses={**ADMIN_NOT_FOUND})
 async def update_time_entry(
     entry_id: int,
     body: TimeEntryUpdate,
@@ -90,7 +91,11 @@ async def update_time_entry(
     return TimeEntryRead.model_validate(entry)
 
 
-@router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
+)
 async def delete_time_entry(
     entry_id: int,
     admin: Annotated[User, Depends(require_admin)],

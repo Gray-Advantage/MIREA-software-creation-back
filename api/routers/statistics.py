@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_async_session
 from api.deps import require_admin
 from api.models import EmployeeProfile, User
+from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND
 from api.schemas.statistics import (
     EmployeeSalary,
     SalaryTableResponse,
@@ -18,7 +19,7 @@ from api.services.statistics import calculate_salary
 router = APIRouter()
 
 
-@router.get("/salary")
+@router.get("/salary", responses={**ADMIN})
 async def salary_table(
     month: Annotated[str, Query(pattern=r"^\d{4}-\d{2}$")],
     admin: Annotated[User, Depends(require_admin)],
@@ -41,7 +42,7 @@ async def salary_table(
     return SalaryTableResponse(month=month, employees=employees)
 
 
-@router.get("/salary/{employee_id}")
+@router.get("/salary/{employee_id}", responses={**ADMIN_NOT_FOUND})
 async def employee_salary(
     employee_id: int,
     month: Annotated[str, Query(pattern=r"^\d{4}-\d{2}$")],
@@ -69,7 +70,7 @@ async def employee_salary(
     return EmployeeSalary(**data)
 
 
-@router.get("/summary")
+@router.get("/summary", responses={**ADMIN})
 async def summary(
     month: Annotated[str, Query(pattern=r"^\d{4}-\d{2}$")],
     admin: Annotated[User, Depends(require_admin)],

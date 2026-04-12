@@ -1,25 +1,24 @@
 from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 import httpx
 import pytest
+from fakeredis import FakeAsyncRedis
 from fastapi import FastAPI
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_async_session
-from api.models import ApiSession, Company, EmployeeProfile, User
+from api.models import Company, EmployeeProfile, User
 from api.services.auth import hash_password
+from api.services.session_store import create_session
 from tests.constants import (
     DEFAULT_COMPANY_EMAIL,
     DEFAULT_COMPANY_NAME,
     DEFAULT_PASSWORD,
     DEFAULT_USER_EMAIL,
 )
-
-SESSION_TTL_DAYS = 30
 
 EMPLOYEE_EMAIL = "employee@test.com"
 EMPLOYEE_PASSWORD = "employeepass123"
@@ -79,20 +78,15 @@ async def registered_admin(session: AsyncSession, company: Company) -> User:
 @pytest.fixture
 async def auth_client(
     transport: ASGITransport,
-    session: AsyncSession,
     registered_admin: User,
+    fake_redis_client: FakeAsyncRedis,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
-    api_session = ApiSession(
-        user_id=registered_admin.id,
-        expires_at=datetime.now(UTC) + timedelta(days=SESSION_TTL_DAYS),
-    )
-    session.add(api_session)
-    await session.flush()
+    sid = await create_session(fake_redis_client, registered_admin.id)
 
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        cookies={"session_id": str(api_session.id)},
+        cookies={"session_id": str(sid)},
     ) as c:
         yield c
 
@@ -123,6 +117,22 @@ async def employee_user(
     session.add(profile)
     await session.flush()
 
+    return user
+
+
+@pytest.fixture
+async def employee_user_without_profile(
+    session: AsyncSession,
+    company: Company,
+) -> User:
+    user = User(
+        email="orphan_employee@test.com",
+        password_hash=hash_password(EMPLOYEE_PASSWORD),
+        role="employee",
+        company_id=company.id,
+    )
+    session.add(user)
+    await session.flush()
     return user
 
 

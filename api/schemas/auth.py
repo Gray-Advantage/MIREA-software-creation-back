@@ -21,3 +21,6 @@ class MeResponse(BaseModel):
     role: str
     company: CompanyRead
     profile: EmployeeProfileRead | None = None
+    final_salary: str | None = None
+    shifts_count: int | None = None
+    total_hours: float | None = None

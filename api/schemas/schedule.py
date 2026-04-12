@@ -13,6 +13,7 @@ class ScheduleEntry(BaseModel):
 class ScheduleRead(ScheduleEntry):
     rate_type: str
     rate_amount: Decimal
+    currency: str
 
     model_config = {"from_attributes": True}
 
@@ -23,6 +24,9 @@ class EmployeeSlot(BaseModel):
     position: str
     start_time: _dt.time
     end_time: _dt.time
+    rate_type: str
+    rate_amount: Decimal
+    currency: str
 
 
 class DaySchedule(BaseModel):
@@ -33,3 +37,11 @@ class DaySchedule(BaseModel):
 class MonthScheduleResponse(BaseModel):
     month: str
     days: list[DaySchedule]
+
+
+class EmployeeScheduleResponse(BaseModel):
+    employee_id: int
+    full_name: str
+    position: str
+    month: str
+    entries: list[ScheduleRead]

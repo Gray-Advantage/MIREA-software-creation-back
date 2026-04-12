@@ -34,6 +34,8 @@ class Company(models.Model):
     contact_name = models.CharField("Контактный телефон", max_length=20)
     business_area = models.CharField("Сфера деятельности", max_length=255)
     email = models.EmailField("Почта", unique=True)
+    inn = models.CharField("ИНН", max_length=12, blank=True, default="")
+    bik = models.CharField("БИК", max_length=9, blank=True, default="")
     created_at = models.DateTimeField("Дата создания", auto_now_add=True)
 
     class Meta:

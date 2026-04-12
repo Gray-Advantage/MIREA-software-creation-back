@@ -79,6 +79,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         await session.flush()
@@ -115,6 +116,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -161,6 +163,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -198,16 +201,18 @@ class TestFinalSalaryGet(AuthTestView):
     ) -> None:
         profile = await _get_profile(session, employee_user.id)
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for day_offset in range(2):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=day_offset),
+                    date=base + _dt.timedelta(days=day_offset),
                     start_time=_dt.time(10, 0),
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         session.add(
@@ -216,7 +221,7 @@ class TestFinalSalaryGet(AuthTestView):
                 type="bonus",
                 amount=Decimal("2000.00"),
                 comment="Премия",
-                date=today,
+                date=base,
             ),
         )
         session.add(
@@ -225,7 +230,7 @@ class TestFinalSalaryGet(AuthTestView):
                 type="fine",
                 amount=Decimal("300.00"),
                 comment="Штраф",
-                date=today,
+                date=base,
             ),
         )
         await session.flush()
@@ -264,6 +269,7 @@ class TestFinalSalaryGet(AuthTestView):
                 end_time=_dt.time(17, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -331,16 +337,18 @@ class TestFinalSalaryShiftRate(AuthTestView):
         await session.flush()
 
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for day_offset in range(3):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=day_offset),
+                    date=base + _dt.timedelta(days=day_offset),
                     start_time=_dt.time(8, 0),
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2000.00"),
+                    currency="RUB",
                 ),
             )
         session.add(
@@ -349,7 +357,7 @@ class TestFinalSalaryShiftRate(AuthTestView):
                 type="bonus",
                 amount=Decimal("500.00"),
                 comment="Бонус",
-                date=today,
+                date=base,
             ),
         )
         session.add(
@@ -358,7 +366,7 @@ class TestFinalSalaryShiftRate(AuthTestView):
                 type="fine",
                 amount=Decimal("200.00"),
                 comment="Штраф",
-                date=today,
+                date=base,
             ),
         )
         await session.flush()
@@ -403,6 +411,7 @@ class TestFinalSalaryList(AuthTestView):
                 end_time=_dt.time(18, 0),
                 rate_type="hourly",
                 rate_amount=Decimal("500.00"),
+                currency="RUB",
             ),
         )
         session.add(
@@ -454,27 +463,30 @@ class TestMidMonthRateChange(AuthTestView):
         """3 дня по 500₽/ч + 3 дня по 700₽/ч (9ч каждый)."""
         profile = await _get_profile(session, employee_user.id)
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for i in range(3):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=i),
+                    date=base + _dt.timedelta(days=i),
                     start_time=_dt.time(9, 0),
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         for i in range(3, 6):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=i),
+                    date=base + _dt.timedelta(days=i),
                     start_time=_dt.time(9, 0),
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("700.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
@@ -523,27 +535,30 @@ class TestMidMonthRateChange(AuthTestView):
         await session.flush()
 
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for i in range(2):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=i),
+                    date=base + _dt.timedelta(days=i),
                     start_time=_dt.time(8, 0),
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2000.00"),
+                    currency="RUB",
                 ),
             )
         for i in range(2, 5):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=i),
+                    date=base + _dt.timedelta(days=i),
                     start_time=_dt.time(8, 0),
                     end_time=_dt.time(20, 0),
                     rate_type="shift",
                     rate_amount=Decimal("2500.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
@@ -574,16 +589,18 @@ class TestMidMonthRateChange(AuthTestView):
         старые записи сохраняют прежнюю ставку."""
         profile = await _get_profile(session, employee_user.id)
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         for i in range(3):
             session.add(
                 Schedule(
                     employee_id=profile.id,
-                    date=today + _dt.timedelta(days=i),
+                    date=base + _dt.timedelta(days=i),
                     start_time=_dt.time(9, 0),
                     end_time=_dt.time(18, 0),
                     rate_type="hourly",
                     rate_amount=Decimal("500.00"),
+                    currency="RUB",
                 ),
             )
         await session.flush()
@@ -613,6 +630,7 @@ class TestMidMonthRateChange(AuthTestView):
         """Изменяем ставку + замена расписания — новые записи
         получают новую ставку."""
         today = _dt.datetime.now(_dt.UTC).date()
+        base = today.replace(day=1)
 
         response = await auth_client.patch(
             f"/api/employees/{employee_user.id}",
@@ -620,7 +638,7 @@ class TestMidMonthRateChange(AuthTestView):
                 "rate_amount": "800.00",
                 "schedule": [
                     {
-                        "date": str(today + _dt.timedelta(days=i)),
+                        "date": str(base + _dt.timedelta(days=i)),
                         "start_time": "09:00:00",
                         "end_time": "18:00:00",
                     }

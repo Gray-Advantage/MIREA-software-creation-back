@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   minio:
     image: minio/minio
     environment:
@@ -23,7 +33,7 @@ services:
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
-      - "9001:9001"
+#      - "9001:9001"
     volumes:
       - ./minio_data:/data
     healthcheck:
@@ -41,6 +51,8 @@ services:
     env_file: ../.env
     depends_on:
       postgres:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
       minio:
         condition: service_healthy

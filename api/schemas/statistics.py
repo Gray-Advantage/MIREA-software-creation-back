@@ -1,3 +1,4 @@
+import datetime as _dt
 from decimal import Decimal
 from typing import Annotated
 
@@ -37,3 +38,49 @@ class SummaryResponse(BaseModel):
     month: str
     total_employees: int
     total_salary_fund: Money
+
+
+class CalcScheduleEntry(BaseModel):
+    date: _dt.date
+    start_time: _dt.time
+    end_time: _dt.time
+    rate_type: RateType
+    rate_amount: Decimal
+
+
+class CalcRequest(BaseModel):
+    month: str
+    schedule: list[CalcScheduleEntry] | None = None
+    exclude_dates: list[_dt.date] | None = None
+    bonuses: Decimal | None = None
+    fines: Decimal | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "month": "2026-04",
+                    "schedule": [
+                        {
+                            "date": "2026-04-10",
+                            "start_time": "09:00:00",
+                            "end_time": "18:00:00",
+                            "rate_type": "hourly",
+                            "rate_amount": 500,
+                        },
+                    ],
+                    "exclude_dates": ["2026-04-15", "2026-04-20"],
+                    "bonuses": 1000,
+                    "fines": 200,
+                },
+            ],
+        },
+    }
+
+
+class CalcResponse(BaseModel):
+    employee_id: int
+    full_name: str
+    currency: str
+    monthly_salary: Money
+    final_salary: Money

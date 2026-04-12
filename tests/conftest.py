@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 import pytest
+from fakeredis import FakeAsyncRedis
 from fastapi import FastAPI
 from httpx import ASGITransport
 from sqlalchemy import event
@@ -10,11 +11,24 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 
 from api.database import DATABASE_URL
 from api.main import app as fastapi_app
+from api.redis_client import get_redis
 
 
 @pytest.fixture(scope="session")
 def app() -> FastAPI:
     return fastapi_app
+
+
+@pytest.fixture(autouse=True)
+async def fake_redis_client(app: FastAPI) -> AsyncGenerator[FakeAsyncRedis, None]:
+    redis = FakeAsyncRedis(decode_responses=True)
+
+    async def _get_redis() -> AsyncGenerator[FakeAsyncRedis, None]:
+        yield redis
+
+    app.dependency_overrides[get_redis] = _get_redis
+    yield redis
+    app.dependency_overrides.pop(get_redis, None)
 
 
 @pytest.fixture(scope="session")

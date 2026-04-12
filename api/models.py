@@ -40,6 +40,8 @@ class Company(Base):
     contact_name: Mapped[str] = mapped_column(String(255))
     business_area: Mapped[str] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(255), unique=True)
+    inn: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    bik: Mapped[str | None] = mapped_column(String(9), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -73,7 +75,6 @@ class User(Base):
     profile: Mapped[EmployeeProfile | None] = relationship(
         back_populates="user",
     )
-    sessions: Mapped[list[ApiSession]] = relationship(back_populates="user")
 
 
 class EmployeeProfile(Base):
@@ -136,6 +137,7 @@ class Schedule(Base):
     end_time: Mapped[time] = mapped_column(Time)
     rate_type: Mapped[str] = mapped_column(String(20))
     rate_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    currency: Mapped[str] = mapped_column(String(3))
 
     employee: Mapped[EmployeeProfile] = relationship(
         back_populates="schedule",
@@ -212,21 +214,3 @@ class TimeEntry(Base):
     employee: Mapped[EmployeeProfile] = relationship(
         back_populates="time_entries",
     )
-
-
-class ApiSession(Base):
-    __tablename__ = "api_session"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid,
-        primary_key=True,
-        default=uuid.uuid4,
-    )
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-    )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-    user: Mapped[User] = relationship(back_populates="sessions")

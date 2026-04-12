@@ -72,3 +72,16 @@ class TestGetEmployee(AuthTestView):
 
         assert response.status_code == HTTPStatus.NOT_FOUND
         assert response.json() == {"detail": "Employee not found"}
+
+    async def test_error__employee_without_profile(
+        self,
+        auth_client: AsyncClient,
+        employee_user_without_profile: User,
+    ) -> None:
+        response = await self.request(
+            auth_client,
+            path={"employee_id": employee_user_without_profile.id},
+        )
+
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        assert response.json() == {"detail": "Employee not found"}

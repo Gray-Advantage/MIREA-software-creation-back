@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from functools import lru_cache
 
 import boto3
 from botocore.exceptions import ClientError
 from decouple import config
 
-S3_ENDPOINT: str = config("S3_ENDPOINT", default="http://localhost:9000")
+S3_ENDPOINT: str = config("S3_ENDPOINT", default="http://minio:9000")
+S3_PUBLIC_URL: str = config("S3_PUBLIC_URL", default="http://localhost:9000")
 S3_ACCESS_KEY: str = config("MINIO_ROOT_USER", default="admin")
 S3_SECRET_KEY: str = config("MINIO_ROOT_PASSWORD", default="adminadmin")
 S3_BUCKET: str = config("S3_BUCKET", default="stafftracker")
@@ -23,12 +25,40 @@ def _get_client():  # noqa: ANN202
     )
 
 
+def public_url(key: str) -> str:
+    return f"{S3_PUBLIC_URL}/{S3_BUCKET}/{key}"
+
+
+def extract_key(url_or_key: str) -> str:
+    prefix = f"{S3_PUBLIC_URL}/{S3_BUCKET}/"
+    if url_or_key.startswith(prefix):
+        return url_or_key[len(prefix) :]
+    return url_or_key
+
+
+def _public_read_policy() -> str:
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{S3_BUCKET}/*"],
+                },
+            ],
+        },
+    )
+
+
 def ensure_bucket() -> None:
     client = _get_client()
     try:
         client.head_bucket(Bucket=S3_BUCKET)
     except ClientError:
         client.create_bucket(Bucket=S3_BUCKET)
+    client.put_bucket_policy(Bucket=S3_BUCKET, Policy=_public_read_policy())
 
 
 async def upload(key: str, data: bytes, content_type: str) -> None:
@@ -40,18 +70,6 @@ async def upload(key: str, data: bytes, content_type: str) -> None:
         Body=data,
         ContentType=content_type,
     )
-
-
-async def download(key: str) -> tuple[bytes, str]:
-    client = _get_client()
-    response = await asyncio.to_thread(
-        client.get_object,
-        Bucket=S3_BUCKET,
-        Key=key,
-    )
-    body: bytes = response["Body"].read()
-    content_type: str = response.get("ContentType", "application/octet-stream")
-    return body, content_type
 
 
 async def delete(key: str) -> None:

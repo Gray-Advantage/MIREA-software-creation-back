@@ -1,35 +1,47 @@
-import base64
 import datetime as _dt
 import secrets
 import uuid
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from dateutil.relativedelta import relativedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
+from redis.asyncio import Redis
 from sqlalchemy import delete, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.sql.selectable import Select
 
 from api.database import get_async_session
 from api.deps import require_admin
 from api.models import (
     Adjustment,
-    ApiSession,
     EmployeeProfile,
     Schedule,
     TimeEntry,
     User,
 )
+from api.redis_client import get_redis
 from api.schemas.employee import (
     EmployeeCreate,
     EmployeeRead,
     EmployeeUpdate,
     PasswordChange,
 )
+from api.schemas.responses import ADMIN, ADMIN_NOT_FOUND, R_409
+from api.schemas.statistics import CalcRequest, CalcResponse
 from api.services import s3
 from api.services.auth import hash_password
+from api.services.session_store import delete_all_sessions_for_user
+from api.services.statistics import calculate_with_overrides
 
 
 def _schedule_date_range(month: str | None) -> tuple[_dt.date, _dt.date]:
@@ -113,54 +125,10 @@ async def _load_adjustments_for_month(
     return by_profile
 
 
-def _filter_past_schedule(profile: EmployeeProfile) -> None:
-    today = _dt.datetime.now(_dt.UTC).date()
-    set_committed_value(
-        profile,
-        "schedule",
-        [s for s in profile.schedule if s.date >= today],
-    )
-
-
-async def _upload_avatar(
-    profile: EmployeeProfile,
-    avatar_b64: str,
-) -> None:
-    if avatar_b64.startswith("data:"):
-        header, b64_data = avatar_b64.split(",", 1)
-        content_type = header.split(":")[1].split(";")[0]
-    else:
-        b64_data = avatar_b64
-        content_type = "image/jpeg"
-
-    data = base64.b64decode(b64_data)
-    ext = content_type.split("/")[-1]
-    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
-
-    if profile.avatar_key:
-        await s3.delete(profile.avatar_key)
-
-    await s3.upload(key, data, content_type)
-    profile.avatar_key = key
-
-
 async def _delete_avatar(profile: EmployeeProfile) -> None:
     if profile.avatar_key:
         await s3.delete(profile.avatar_key)
         profile.avatar_key = None
-
-
-async def _handle_avatar_field(
-    profile: EmployeeProfile,
-    update_data: dict[str, object],
-) -> None:
-    if "avatar" not in update_data:
-        return
-    value = update_data.pop("avatar")
-    if value is None:
-        await _delete_avatar(profile)
-    else:
-        await _upload_avatar(profile, value)
 
 
 def _build_employee_response(
@@ -171,13 +139,12 @@ def _build_employee_response(
 ) -> EmployeeRead:
     salary = _compute_monthly_salary(profile.schedule, month)
     final = _compute_final_salary(salary, adjustments or [])
-    _filter_past_schedule(profile)
 
     from api.schemas.employee import EmployeeProfileRead
 
     profile_read = EmployeeProfileRead.model_validate(profile)
     if profile.avatar_key:
-        profile_read.avatar_url = f"/api/employees/{user.id}/avatar"
+        profile_read.avatar_url = s3.public_url(profile.avatar_key)
 
     return EmployeeRead(
         id=user.id,
@@ -189,16 +156,68 @@ def _build_employee_response(
     )
 
 
+def _apply_search_filters(  # noqa: C901
+    query: Select[Any],
+    *,
+    q: str | None,
+    full_name: str | None,
+    contact: str | None,
+    position: str | None,
+) -> Select[Any]:
+    has_specific = any(f and f.strip() for f in [full_name, contact, position])
+    has_q = bool(q and q.strip())
+
+    if has_specific or has_q:
+        query = query.join(
+            EmployeeProfile,
+            User.id == EmployeeProfile.user_id,
+        )
+
+    if has_q:
+        term = f"%{(q or '').strip()}%"
+        query = query.where(
+            or_(
+                User.email.ilike(term),
+                EmployeeProfile.full_name.ilike(term),
+                EmployeeProfile.phone.ilike(term),
+                EmployeeProfile.position.ilike(term),
+            ),
+        )
+
+    if full_name and (term := full_name.strip()):
+        query = query.where(EmployeeProfile.full_name.ilike(f"%{term}%"))
+    if contact and (term := contact.strip()):
+        pat = f"%{term}%"
+        query = query.where(
+            or_(User.email.ilike(pat), EmployeeProfile.phone.ilike(pat)),
+        )
+    if position and (term := position.strip()):
+        query = query.where(EmployeeProfile.position.ilike(f"%{term}%"))
+    return query
+
+
 router = APIRouter()
 
 
-@router.get("")
-async def list_employees(
+@router.get("", responses={**ADMIN})
+async def list_employees(  # noqa: PLR0913
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
     q: Annotated[
         str | None,
-        Query(description="Поиск по email, ФИО, телефону, должности"),
+        Query(description="Общий поиск по email, ФИО, телефону, должности"),
+    ] = None,
+    full_name: Annotated[
+        str | None,
+        Query(description="Фильтр по ФИО"),
+    ] = None,
+    contact: Annotated[
+        str | None,
+        Query(description="Фильтр по email / телефону"),
+    ] = None,
+    position: Annotated[
+        str | None,
+        Query(description="Фильтр по должности"),
     ] = None,
     month: Annotated[
         str | None,
@@ -213,19 +232,15 @@ async def list_employees(
         .options(joinedload(User.profile))
         .where(User.company_id == admin.company_id, User.role == "employee")
     )
-    if q and (term := q.strip()):
-        term = f"%{term}%"
-        query = query.join(
-            EmployeeProfile,
-            User.id == EmployeeProfile.user_id,
-        ).where(
-            or_(
-                User.email.ilike(term),
-                EmployeeProfile.full_name.ilike(term),
-                EmployeeProfile.phone.ilike(term),
-                EmployeeProfile.position.ilike(term),
-            ),
-        )
+
+    query = _apply_search_filters(
+        query,
+        q=q,
+        full_name=full_name,
+        contact=contact,
+        position=position,
+    )
+
     result = await db.execute(query)
     users = result.unique().scalars().all()
 
@@ -252,6 +267,7 @@ async def list_employees(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    responses={**ADMIN, **R_409},
 )
 async def create_employee(
     body: EmployeeCreate,
@@ -282,12 +298,10 @@ async def create_employee(
         rate_type=body.rate_type.value,
         rate_amount=body.rate_amount,
         currency=body.currency.value,
+        avatar_key=s3.extract_key(body.avatar_url) if body.avatar_url else None,
     )
     db.add(profile)
     await db.flush()
-
-    if body.avatar:
-        await _upload_avatar(profile, body.avatar)
 
     if body.schedule:
         schedule_dicts = [e.model_dump() for e in body.schedule]
@@ -300,6 +314,7 @@ async def create_employee(
                 schedule_dicts,
                 body.rate_type.value,
                 body.rate_amount,
+                body.currency.value,
             ),
         )
 
@@ -311,12 +326,13 @@ async def create_employee(
     return _build_employee_response(user, profile, adjustments=[])
 
 
-async def _replace_schedule(
+async def _replace_schedule(  # noqa: PLR0913
     db: AsyncSession,
     profile_id: int,
     entries: list[dict[str, object]],
     rate_type: str,
     rate_amount: Decimal,
+    currency: str,
 ) -> list[Schedule]:
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile_id),
@@ -330,6 +346,7 @@ async def _replace_schedule(
                 end_time=entry["end_time"],
                 rate_type=rate_type,
                 rate_amount=rate_amount,
+                currency=currency,
             ),
         )
     await db.flush()
@@ -367,7 +384,7 @@ async def _get_employee_user(
     admin: User,
     db: AsyncSession,
     month: str | None = None,
-) -> User:
+) -> tuple[User, EmployeeProfile]:
     result = await db.execute(
         select(User)
         .options(joinedload(User.profile))
@@ -378,16 +395,22 @@ async def _get_employee_user(
         ),
     )
     user = result.unique().scalar_one_or_none()
-    if user is None or user.profile is None:
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Employee not found",
         )
-    await _load_schedule_filtered(db, [user.profile], month)
-    return user
+    profile = user.profile
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found",
+        )
+    await _load_schedule_filtered(db, [profile], month)
+    return user, profile
 
 
-@router.get("/{employee_id}")
+@router.get("/{employee_id}", responses={**ADMIN_NOT_FOUND})
 async def get_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
@@ -400,28 +423,28 @@ async def get_employee(
         ),
     ] = None,
 ) -> EmployeeRead:
-    user = await _get_employee_user(employee_id, admin, db, month)
+    user, profile = await _get_employee_user(employee_id, admin, db, month)
     adj_map = await _load_adjustments_for_month(
         db,
-        [user.profile.id],
+        [profile.id],
         month,
     )
     return _build_employee_response(
         user,
-        user.profile,
+        profile,
         month,
-        adj_map.get(user.profile.id, []),
+        adj_map.get(profile.id, []),
     )
 
 
-@router.patch("/{employee_id}")
-async def update_employee(
+@router.patch("/{employee_id}", responses={**ADMIN_NOT_FOUND})
+async def update_employee(  # noqa: C901
     employee_id: int,
     body: EmployeeUpdate,
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> EmployeeRead:
-    user = await _get_employee_user(employee_id, admin, db)
+    user, profile = await _get_employee_user(employee_id, admin, db)
     update_data = body.model_dump(exclude_unset=True)
 
     if "is_active" in update_data:
@@ -429,8 +452,9 @@ async def update_employee(
 
     new_schedule = update_data.pop("schedule", None)
 
-    profile = user.profile
-    await _handle_avatar_field(profile, update_data)
+    if "avatar_url" in update_data:
+        raw = update_data.pop("avatar_url")
+        update_data["avatar_key"] = s3.extract_key(raw) if raw else None
 
     for field, value in update_data.items():
         if hasattr(profile, field):
@@ -450,6 +474,7 @@ async def update_employee(
                 new_schedule,
                 profile.rate_type,
                 profile.rate_amount,
+                profile.currency,
             ),
         )
 
@@ -466,47 +491,23 @@ async def update_employee(
     )
 
 
-@router.get("/{employee_id}/avatar")
-async def get_avatar(
-    employee_id: int,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> Response:
-    user = await _get_employee_user(employee_id, admin, db)
-    if not user.profile.avatar_key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Avatar not found",
-        )
-    data, content_type = await s3.download(user.profile.avatar_key)
-    return Response(content=data, media_type=content_type)
-
-
 @router.delete(
-    "/{employee_id}/avatar",
+    "/{employee_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
 )
-async def delete_avatar(
-    employee_id: int,
-    admin: Annotated[User, Depends(require_admin)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-) -> None:
-    user = await _get_employee_user(employee_id, admin, db)
-    await _delete_avatar(user.profile)
-    await db.commit()
-
-
-@router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_employee(
     employee_id: int,
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> None:
-    user = await _get_employee_user(employee_id, admin, db)
-    profile = user.profile
+    user, profile = await _get_employee_user(employee_id, admin, db)
 
     if profile.avatar_key:
         await s3.delete(profile.avatar_key)
+
+    await delete_all_sessions_for_user(redis, user.id)
 
     await db.execute(
         delete(Schedule).where(Schedule.employee_id == profile.id),
@@ -520,21 +521,93 @@ async def delete_employee(
     await db.execute(
         delete(EmployeeProfile).where(EmployeeProfile.id == profile.id),
     )
-    await db.execute(
-        delete(ApiSession).where(ApiSession.user_id == user.id),
-    )
     await db.execute(delete(User).where(User.id == user.id))
     await db.commit()
 
 
-@router.patch("/{employee_id}/password")
+@router.patch("/{employee_id}/password", responses={**ADMIN_NOT_FOUND})
 async def change_employee_password(
     employee_id: int,
     body: PasswordChange,
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict[str, str]:
-    user = await _get_employee_user(employee_id, admin, db)
+    user, _profile = await _get_employee_user(employee_id, admin, db)
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"detail": "Password changed"}
+
+
+@router.post("/{employee_id}/calculate", responses={**ADMIN_NOT_FOUND})
+async def calculate(
+    employee_id: int,
+    body: CalcRequest,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> CalcResponse:
+    _user, profile = await _get_employee_user(employee_id, admin, db)
+    year, m = map(int, body.month.split("-"))
+
+    data = await calculate_with_overrides(
+        db,
+        profile,
+        year,
+        m,
+        schedule_overrides=body.schedule,
+        exclude_dates=body.exclude_dates,
+        bonuses_override=body.bonuses,
+        fines_override=body.fines,
+    )
+    return CalcResponse(**data)
+
+
+@router.post("/avatar", responses={**ADMIN})
+async def upload_standalone_avatar(
+    file: UploadFile,
+    _admin: Annotated[User, Depends(require_admin)],
+) -> dict[str, str]:
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{uuid.uuid4().hex}.{ext}"
+    await s3.upload(key, data, content_type)
+    return {"avatar_url": s3.public_url(key)}
+
+
+@router.put("/{employee_id}/avatar", responses={**ADMIN_NOT_FOUND})
+async def upload_avatar(
+    employee_id: int,
+    file: UploadFile,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> dict[str, str]:
+    _user, profile = await _get_employee_user(employee_id, admin, db)
+
+    data = await file.read()
+    content_type = file.content_type or "image/jpeg"
+    ext = content_type.split("/")[-1]
+    key = f"avatars/{profile.id}_{uuid.uuid4().hex}.{ext}"
+
+    if profile.avatar_key:
+        await s3.delete(profile.avatar_key)
+
+    await s3.upload(key, data, content_type)
+    profile.avatar_key = key
+    await db.commit()
+
+    return {"avatar_url": s3.public_url(key)}
+
+
+@router.delete(
+    "/{employee_id}/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**ADMIN_NOT_FOUND},
+)
+async def delete_avatar(
+    employee_id: int,
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_async_session)],
+) -> None:
+    _user, profile = await _get_employee_user(employee_id, admin, db)
+    await _delete_avatar(profile)
+    await db.commit()

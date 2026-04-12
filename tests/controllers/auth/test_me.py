@@ -32,7 +32,12 @@ class TestMe(AuthTestView):
                 "contact_name": "Test Contact",
                 "business_area": "IT",
                 "email": DEFAULT_COMPANY_EMAIL,
+                "inn": None,
+                "bik": None,
                 "created_at": ANY,
             },
             "profile": None,
+            "final_salary": None,
+            "shifts_count": None,
+            "total_hours": None,
         }

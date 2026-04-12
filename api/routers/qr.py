@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_async_session
 from api.deps import require_admin, require_employee
 from api.models import EmployeeProfile, QRSession, TimeEntry, User
+from api.schemas.responses import ADMIN, EMPLOYEE, R_400, R_404
 from api.schemas.time_entry import (
     QRGenerateResponse,
     QRScanRequest,
@@ -21,7 +22,7 @@ router = APIRouter()
 QR_TTL_MINUTES = 10
 
 
-@router.post("/generate")
+@router.post("/generate", responses={**ADMIN})
 async def generate_qr(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
@@ -59,7 +60,7 @@ async def generate_qr(
     )
 
 
-@router.post("/scan")
+@router.post("/scan", responses={**EMPLOYEE, **R_400, **R_404})
 async def scan_qr(
     body: QRScanRequest,
     employee_user: Annotated[User, Depends(require_employee)],
@@ -135,7 +136,7 @@ async def scan_qr(
     )
 
 
-@router.get("/active")
+@router.get("/active", responses={**ADMIN})
 async def get_active_qr(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_async_session)],

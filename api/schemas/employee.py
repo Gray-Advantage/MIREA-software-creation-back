@@ -27,7 +27,7 @@ class EmployeeCreate(BaseModel):
     rate_type: RateType
     rate_amount: Decimal
     currency: Currency
-    avatar: str | None = None
+    avatar_url: str | None = None
     schedule: list[ScheduleEntry] = []
 
     model_config = {
@@ -41,7 +41,7 @@ class EmployeeCreate(BaseModel):
                     "rate_type": "hourly",
                     "rate_amount": 350,
                     "currency": "RUB",
-                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
+                    "avatar_url": "http://localhost:9000/stafftracker/avatars/abc123.jpeg",
                     "schedule": [
                         {
                             "date": "2026-04-10",
@@ -82,7 +82,7 @@ class EmployeeProfileRead(BaseModel):
                     "rate_type": "hourly",
                     "rate_amount": "350.00",
                     "currency": "RUB",
-                    "avatar_url": "/api/employees/10/avatar",
+                    "avatar_url": "http://localhost:9000/stafftracker/avatars/abc123.jpeg",
                     "created_at": "2026-03-01T12:00:00Z",
                     "updated_at": None,
                     "schedule": [
@@ -92,6 +92,7 @@ class EmployeeProfileRead(BaseModel):
                             "end_time": "18:00:00",
                             "rate_type": "hourly",
                             "rate_amount": "350.00",
+                            "currency": "RUB",
                         },
                     ],
                 },
@@ -125,7 +126,7 @@ class EmployeeRead(BaseModel):
                         "rate_type": "hourly",
                         "rate_amount": "350.00",
                         "currency": "RUB",
-                        "avatar_url": "/api/employees/10/avatar",
+                        "avatar_url": "http://localhost:9000/stafftracker/avatars/abc123.jpeg",
                         "created_at": "2026-03-01T12:00:00Z",
                         "updated_at": None,
                         "schedule": [
@@ -135,6 +136,7 @@ class EmployeeRead(BaseModel):
                                 "end_time": "18:00:00",
                                 "rate_type": "hourly",
                                 "rate_amount": "350.00",
+                                "currency": "RUB",
                             },
                         ],
                     },
@@ -153,8 +155,8 @@ class EmployeeUpdate(BaseModel):
     rate_type: RateType | None = None
     rate_amount: Decimal | None = None
     currency: Currency | None = None
+    avatar_url: str | None = None
     is_active: bool | None = None
-    avatar: str | None = None
     schedule: list[ScheduleEntry] | None = None
 
     model_config = {
@@ -177,9 +179,6 @@ class EmployeeUpdate(BaseModel):
                             "end_time": "19:00:00",
                         },
                     ],
-                },
-                {
-                    "avatar": "data:image/jpeg;base64,/9j/4AAQ...",
                 },
                 {
                     "is_active": False,
